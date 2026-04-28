@@ -35,7 +35,14 @@ function LobbyScreen() {
   useEffect(() => { playersRef.current = players; }, [players]);
 
   // Detect when players leave
+  const isFirstRender = useRef(true);
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      previousPlayersRef.current = players;
+      return;
+    }
+    
     const prevPlayers = previousPlayersRef.current;
     const currentPlayers = players;
 
@@ -103,7 +110,7 @@ function LobbyScreen() {
       .order('created_at')
       .then(({ data }) => {
         if (data) {
-          setChatMessages(data.map((m: any) => ({
+          setChatMessages(data.map((m: { player_id: string; players?: { name?: string; avatar_color?: string }; text: string; created_at: string }) => ({
             playerId: m.player_id,
             playerName: m.players?.name ?? 'Unknown',
             color: m.players?.avatar_color ?? '#6366f1',
@@ -117,7 +124,7 @@ function LobbyScreen() {
     const channel = supabase
       .channel(`lobby-chat:${room.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${room.id}` }, async (payload) => {
-        const row = payload.new as any;
+        const row = payload.new as { type?: string; player_id: string; text: string; created_at: string };
         if (row.type !== 'lobby') return;
         const player = playersRef.current.find((p) => p.id === row.player_id);
         setChatMessages((prev) => [...prev, {

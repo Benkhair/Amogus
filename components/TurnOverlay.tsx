@@ -5,7 +5,7 @@ import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Send, Loader2, Eye, EyeOff, MessageCircle, Edit3, Timer } from 'lucide-react';
 
-const TURN_DURATION = 30;
+const TURN_DURATION = 45;
 
 interface ChatMessage {
   id: string;
@@ -70,19 +70,16 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     if (!advancing) {
       setLoadingTime(0);
     }
-  }, [advancing]);
+  }, [advancing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear messages when entering lobby or when round changes
   const currentRound = gameState?.round ?? 1;
   useEffect(() => {
-    if (gameState?.current_phase === 'lobby') {
+    if (gameState?.current_phase === 'lobby' || gameState?.current_phase === 'speaking') {
       setMessages([]);
     }
-  }, [gameState?.current_phase]);
-
-  useEffect(() => {
-    setMessages([]);
-  }, [currentRound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.current_phase, currentRound]);
 
   // Loading timer after clicking Done
   useEffect(() => {
@@ -112,7 +109,7 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
         .order('created_at');
         
       if (data) {
-        setMessages(data.map((m: any) => ({
+        setMessages(data.map((m: { id: string; player_id: string; players?: { name?: string; avatar_color?: string }; text: string; created_at: string; type?: 'chat' | 'clue' }) => ({
           id: m.id,
           playerId: m.player_id,
           playerName: m.players?.name ?? 'Unknown',
@@ -134,7 +131,7 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     const channel = supabase
       .channel(`chat:${room.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${room.id}` }, async (payload) => {
-        const row = payload.new as any;
+        const row = payload.new as { id: string; player_id: string; text: string; type?: 'chat' | 'clue'; created_at: string; round?: number; players?: { name?: string; avatar_color?: string } };
         // Only add messages from the current round
         if (row.round && row.round !== currentRound) return;
         // Fetch fresh player data instead of relying on captured players variable
@@ -286,6 +283,18 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
               countdown <= 5 ? 'text-red-200 scale-110' : countdown <= 10 ? 'text-yellow-200' : 'text-white'
             }`}>
               {countdown}s
+            </span>
+          </div>
+        )}
+
+        {/* Skip indicator */}
+        {myPlayer && (
+          <div className={`bg-black/60 backdrop-blur-sm rounded-xl px-3 py-1.5 border flex items-center gap-2 ${
+            myPlayer.has_skipped ? 'border-gray-700/50' : 'border-blue-500/40'
+          }`}>
+            <span className="text-xs">⏭️</span>
+            <span className={`text-xs font-semibold ${myPlayer.has_skipped ? 'text-gray-500' : 'text-blue-300'}`}>
+              {myPlayer.has_skipped ? 'No skips' : '1 skip'}
             </span>
           </div>
         )}

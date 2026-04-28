@@ -12,27 +12,30 @@ interface CameraControllerProps {
 
 export default function CameraController({ currentSpeaker, phase }: CameraControllerProps) {
   const { camera } = useThree();
-  const targetPos = useRef(new THREE.Vector3(0, 10, 14));
+  const targetPos = useRef(new THREE.Vector3(0, 14, 12));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
   const currentLook = useRef(new THREE.Vector3(0, 0, 0));
 
   useEffect(() => {
     if (currentSpeaker && phase === 'speaking') {
-      // Zoom toward the speaker
+      // Focus on the speaker at the meeting table
       const sx = currentSpeaker.pos_x || 0;
       const sz = currentSpeaker.pos_z || 0;
       const angle = Math.atan2(sz, sx);
-      const dist = 5;
+      // Position camera to look at speaker from outside the table
+      const camDist = 6;
+      const camHeight = 5;
       targetPos.current.set(
-        sx + Math.cos(angle) * dist,
-        4.5,
-        sz + Math.sin(angle) * dist
+        sx + Math.cos(angle) * camDist,
+        camHeight,
+        sz + Math.sin(angle) * camDist
       );
-      targetLook.current.set(sx, 1, sz);
+      // Look at speaker, slightly above ground
+      targetLook.current.set(sx, 1.2, sz);
     } else {
-      // Default overview
-      targetPos.current.set(0, 12, 16);
-      targetLook.current.set(0, 0, 0);
+      // Default overview of meeting table
+      targetPos.current.set(0, 14, 12);
+      targetLook.current.set(0, 0.5, 0);
     }
   }, [currentSpeaker?.id, phase]);
 

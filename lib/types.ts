@@ -20,6 +20,7 @@ export interface Player {
   category: string;
   is_eliminated: boolean;
   is_connected: boolean;
+  has_skipped: boolean;
   pos_x: number;
   pos_z: number;
   joined_at: string;

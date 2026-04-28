@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { cleanupStaleRooms, touchRoomActivity } from '@/lib/supabase/roomMaintenance';
 
-const TURN_TIMER_MS = 30000; // 30 seconds per turn
+const TURN_TIMER_MS = 45000; // 45 seconds per turn
 
 export async function POST(req: NextRequest) {
   const { roomId, sessionId, skip } = await req.json();
@@ -37,14 +37,26 @@ export async function POST(req: NextRequest) {
 
   let turnOrder = [...gs.turn_order];
 
-  // If the speaker was skipped (timer expired, no clue), re-append them for one more chance
+  // Handle skip system - each player gets 1 skip
   if (skip && currentSpeakerId) {
-    // Count how many times this player already appears AFTER current index
-    const remainingAppearances = turnOrder.slice(gs.current_turn_index + 1).filter(id => id === currentSpeakerId).length;
-    // Only re-queue once (prevent infinite loop)
-    if (remainingAppearances === 0) {
+    // Check if player has already used their skip
+    const { data: currentPlayer } = await supabase
+      .from('players')
+      .select('has_skipped')
+      .eq('id', currentSpeakerId)
+      .single();
+    
+    if (currentPlayer && !currentPlayer.has_skipped) {
+      // First skip - mark as skipped and re-add to end of rotation
+      await supabase
+        .from('players')
+        .update({ has_skipped: true })
+        .eq('id', currentSpeakerId);
+      
+      // Add player back to end of turn order for another chance
       turnOrder.push(currentSpeakerId);
     }
+    // If already skipped, they don't get another chance - move to next player
   }
 
   const nextIndex = gs.current_turn_index + 1;

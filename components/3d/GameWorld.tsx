@@ -20,7 +20,7 @@ export default function GameWorld({ players, currentSpeaker, myPlayerId, phase }
   return (
     <Canvas
       shadows
-      camera={{ position: [0, 12, 16], fov: 50 }}
+      camera={{ position: [0, 14, 12], fov: 55 }}
       style={{ width: '100%', height: '100%' }}
       gl={{ antialias: true, alpha: false }}
     >

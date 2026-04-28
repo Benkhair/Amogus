@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
   const shuffled = [...players].sort(() => Math.random() - 0.5);
   const turnOrder = shuffled.map((p) => p.id);
 
-  // Update each player with their role, word, category, and circular spawn position
-  const radius = Math.max(3, players.length * 0.8);
+  // Update each player with their role, word, category, circular spawn position around table, and reset skips
+  const radius = 5; // Fixed radius for meeting table
   for (let i = 0; i < players.length; i++) {
     const isImposter = players[i].id === players[imposterIndex].id;
     const angle = (i / players.length) * Math.PI * 2;
@@ -54,12 +54,13 @@ export async function POST(req: NextRequest) {
         category: wordPair.category,
         pos_x: parseFloat((Math.cos(angle) * radius).toFixed(2)),
         pos_z: parseFloat((Math.sin(angle) * radius).toFixed(2)),
+        has_skipped: false,
       })
       .eq('id', players[i].id);
   }
 
-  // Set turn timer (30 seconds from now for first speaker)
-  const timerEnd = new Date(Date.now() + 30000).toISOString();
+  // Set turn timer (45 seconds from now for first speaker)
+  const timerEnd = new Date(Date.now() + 45000).toISOString();
 
   // Get current round and increment it for the new game
   const { data: currentGs } = await supabase.from('game_state').select('round').eq('room_id', roomId).single();

@@ -33,8 +33,10 @@ create table if not exists players (
   avatar_color text default '#6366f1',
   is_imposter boolean default false,
   word text default '',
+  category text default '',
   is_eliminated boolean default false,
   is_connected boolean default true,
+  has_skipped boolean default false,
   pos_x float default 0,
   pos_z float default 0,
   joined_at timestamptz default now()

@@ -188,6 +188,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Exception refreshing votes:', err);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
 
   // Setup realtime subscriptions with error handling and reconnection
@@ -249,7 +250,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         filter: `room_id=eq.${room.id}`
       }, (payload) => {
         console.log('Votes change:', payload.eventType, payload);
-        refreshVotes((payload as any).new?.round ?? gameStateRef.current?.round);
+        refreshVotes((payload.new as { round?: number })?.round ?? gameStateRef.current?.round);
       })
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {

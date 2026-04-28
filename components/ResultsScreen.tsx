@@ -39,7 +39,14 @@ export default function ResultsScreen() {
   }, [players]);
 
   // Detect when players leave
+  const isFirstRender = useRef(true);
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      previousPlayersRef.current = players;
+      return;
+    }
+
     const prevPlayers = previousPlayersRef.current;
     const currentPlayers = players;
 
@@ -108,7 +115,7 @@ export default function ResultsScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'play_again_requests', filter: `room_id=eq.${roomId}` },
-        (payload: any) => {
+        (payload: { eventType: string; new: { id?: string; status?: string } | null }) => {
           console.log('Play again request change:', payload.eventType, payload);
           if (payload.eventType === 'DELETE' || !payload.new?.id) {
             setRequestActive(false);
@@ -128,12 +135,12 @@ export default function ResultsScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'play_again_responses', filter: `room_id=eq.${roomId}` },
-        (payload: any) => {
+        (payload: { eventType: string; new: { id?: string; status?: string } | null }) => {
           console.log('Play again response change:', payload.eventType, payload);
           doFetchResponses(roomId);
         }
       )
-      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR', err?: any) => {
+      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR', err?: Error) => {
         console.log('Play again subscription status:', status, err);
         if (status === 'SUBSCRIBED') {
           doFetchRequest(roomId);

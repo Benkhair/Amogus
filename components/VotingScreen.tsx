@@ -25,7 +25,14 @@ export default function VotingScreen() {
   const previousPlayersRef = useRef(players);
 
   // Detect when players leave
+  const isFirstRender = useRef(true);
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      previousPlayersRef.current = players;
+      return;
+    }
+
     const prevPlayers = previousPlayersRef.current;
     const currentPlayers = players;
 
@@ -82,7 +89,7 @@ export default function VotingScreen() {
         .order('created_at');
         
       if (data) {
-        setClues(data.map((m: any) => ({
+        setClues(data.map((m: { player_id: string; players?: { name?: string; avatar_color?: string }; text: string }) => ({
           playerId: m.player_id,
           playerName: m.players?.name ?? 'Unknown',
           color: m.players?.avatar_color ?? '#6366f1',
