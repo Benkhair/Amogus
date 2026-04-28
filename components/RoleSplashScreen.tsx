@@ -21,6 +21,7 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
 
   const isImposter = myPlayer?.is_imposter ?? false;
   const word = myPlayer?.word ?? '???';
+  const category = myPlayer?.category ?? 'Unknown';
 
   useEffect(() => {
     // Only set start time once on initial mount
@@ -47,58 +48,69 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
 
   return (
     <div className="cinematic-bg fixed inset-0 z-50 flex items-center justify-center animate-fadeIn overflow-hidden">
-      {/* Ambient role glow */}
-      <div className={`pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-3xl animate-glowPulse ${isImposter ? 'bg-red-600/20' : 'bg-indigo-500/20'}`} />
-      <div className="w-full max-w-md px-4 flex flex-col items-center gap-5 text-center relative mx-auto">
+      {/* Ambient role glow - centered and large */}
+      <div className={`pointer-events-none absolute inset-0 flex items-center justify-center`}>
+        <div className={`w-[700px] h-[700px] rounded-full blur-3xl animate-glowPulse ${isImposter ? 'bg-red-600/15' : 'bg-indigo-500/15'}`} />
+      </div>
+
+      {/* Main content container */}
+      <div className="w-full h-full flex flex-col items-center justify-center px-4 relative">
+        {/* Card */}
         <div
-          className={`w-full rounded-3xl p-6 sm:p-8 border flex flex-col items-center gap-3 animate-popIn relative ${
+          className={`w-full max-w-md rounded-3xl p-8 border flex flex-col items-center gap-6 animate-popIn relative ${
             isImposter
-              ? 'bg-gradient-to-b from-red-950/90 to-red-950/60 border-red-500/40'
-              : 'bg-gradient-to-b from-indigo-950/90 to-indigo-950/60 border-indigo-500/40'
+              ? 'bg-gradient-to-b from-red-950/85 to-red-950/50 border-red-500/30'
+              : 'bg-gradient-to-b from-indigo-950/85 to-indigo-950/50 border-indigo-500/30'
           }`}
           style={{
             boxShadow: isImposter
-              ? '0 25px 60px -15px rgba(220,38,38,0.4), inset 0 1px 0 rgba(255,255,255,0.08)'
-              : '0 25px 60px -15px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.08)',
+              ? '0 30px 80px -20px rgba(220,38,38,0.5), inset 0 1px 0 rgba(255,255,255,0.1)'
+              : '0 30px 80px -20px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
           }}
         >
-          <div className="text-6xl animate-bounceIn">{isImposter ? '🎭' : '🕵️'}</div>
+          {/* Role emoji */}
+          <div className="text-7xl animate-bounceIn">{isImposter ? '🎭' : '🕵️'}</div>
 
-          <div className="space-y-0.5">
-            <p className={`text-[10px] uppercase tracking-[0.2em] font-bold ${isImposter ? 'text-red-400' : 'text-indigo-400'}`}>
-              You are
+          {/* Role title */}
+          <div className="space-y-1.5 text-center">
+            <p className={`text-[11px] uppercase tracking-[0.25em] font-bold ${isImposter ? 'text-red-400' : 'text-indigo-400'}`}>
+              You are the
             </p>
-            <h2 className={`text-3xl sm:text-4xl font-black ${isImposter ? 'text-red-200' : 'text-white'}`}>
+            <h2 className={`text-4xl font-black tracking-tight ${isImposter ? 'text-red-100' : 'text-indigo-100'}`}>
               {isImposter ? 'Sinungaling' : 'Normal na Tao'}
             </h2>
           </div>
 
-          <div className={`w-full rounded-xl p-3 ${isImposter ? 'bg-red-900/50 border border-red-700/50' : 'bg-indigo-900/50 border border-indigo-700/50'}`}>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Your word</p>
-            <p className={`text-xl sm:text-2xl font-black ${isImposter ? 'text-red-100' : 'text-white'}`}>{word}</p>
+          {/* Word card */}
+          <div className={`w-full rounded-2xl p-4 border-2 ${isImposter ? 'bg-red-900/40 border-red-600/40' : 'bg-indigo-900/40 border-indigo-600/40'}`}>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-semibold">Category</p>
+            <p className={`text-sm font-bold mb-3 ${isImposter ? 'text-red-300' : 'text-indigo-300'}`}>{category}</p>
+            <div className="border-t border-gray-600/30 pt-3">
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5 font-semibold">Your word</p>
+              <p className={`text-3xl font-black tracking-tight ${isImposter ? 'text-red-100' : 'text-white'}`}>{word}</p>
+            </div>
           </div>
 
-          {isImposter ? (
-            <p className="text-red-300/90 text-xs text-center leading-relaxed max-w-[260px]">
-              Blend in! Describe your word as if you know what the others are talking about.
-            </p>
-          ) : (
-            <p className="text-indigo-300/90 text-xs text-center leading-relaxed max-w-[260px]">
-              Give clues without being too obvious. Find the Sinungaling!
-            </p>
-          )}
+          {/* Instructions */}
+          <div className={`text-sm leading-relaxed ${isImposter ? 'text-red-300/80' : 'text-indigo-300/80'}`}>
+            {isImposter ? (
+              <p>Blend in! Describe your word as if you know what the others are talking about.</p>
+            ) : (
+              <p>Give clues without being too obvious. Find the Sinungaling!</p>
+            )}
+          </div>
         </div>
 
-        {/* Progress bar showing time until game starts */}
-        <div className="w-full max-w-xs mx-auto animate-slideUp" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-gray-500 text-[10px] uppercase tracking-wider">Entering game...</span>
-            <span className="text-white text-[10px] font-bold">{Math.round(progress)}%</span>
+        {/* Progress bar - below card */}
+        <div className="w-full max-w-md mt-8 animate-slideUp" style={{ animationDelay: '0.2s' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Entering game...</span>
+            <span className="text-white text-[10px] font-bold tabular-nums">{Math.round(progress)}%</span>
           </div>
-          <div className="h-1.5 bg-gray-800/80 rounded-full overflow-hidden">
+          <div className="h-2 bg-gray-800/60 rounded-full overflow-hidden border border-gray-700/40">
             <div
               className={`h-full rounded-full transition-all duration-75 ease-linear ${
-                isImposter ? 'bg-red-500' : 'bg-indigo-500'
+                isImposter ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-indigo-500 to-indigo-400'
               }`}
               style={{ width: `${progress}%` }}
             />

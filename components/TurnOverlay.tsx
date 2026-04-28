@@ -270,16 +270,20 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
           </div>
         </div>
 
-        {/* Countdown Timer */}
+        {/* Countdown Timer - Enhanced with pressure animations */}
         {!currentClue && gameState?.current_phase === 'speaking' && (
-          <div className={`bg-black/70 backdrop-blur-sm rounded-xl px-3 py-1.5 border flex items-center gap-2 transition-all ${
-            countdown <= 5 ? 'border-red-500/60 animate-pulse' : countdown <= 10 ? 'border-yellow-500/40' : 'border-white/10'
+          <div className={`backdrop-blur-md rounded-xl px-4 py-2 border flex items-center gap-2.5 transition-all duration-200 ${
+            countdown <= 5 
+              ? 'bg-gradient-to-r from-red-950/90 to-red-900/70 border-red-500/80 shadow-lg shadow-red-900/50 animate-pulse' 
+              : countdown <= 10 
+              ? 'bg-gradient-to-r from-yellow-950/80 to-yellow-900/60 border-yellow-500/60 shadow-lg shadow-yellow-900/30' 
+              : 'bg-black/60 border-white/20'
           }`}>
-            <Timer className={`w-3.5 h-3.5 ${
-              countdown <= 5 ? 'text-red-400' : countdown <= 10 ? 'text-yellow-400' : 'text-gray-400'
+            <Timer className={`w-4 h-4 flex-shrink-0 transition-all ${
+              countdown <= 5 ? 'text-red-300 animate-spin' : countdown <= 10 ? 'text-yellow-300' : 'text-gray-400'
             }`} />
-            <span className={`font-black tabular-nums text-sm ${
-              countdown <= 5 ? 'text-red-400' : countdown <= 10 ? 'text-yellow-400' : 'text-white'
+            <span className={`font-black tabular-nums text-base transition-all ${
+              countdown <= 5 ? 'text-red-200 scale-110' : countdown <= 10 ? 'text-yellow-200' : 'text-white'
             }`}>
               {countdown}s
             </span>
@@ -328,11 +332,10 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
             <div ref={chatEndRef} />
           </div>
           {/* Chat input for all players */}
-          <div className="relative flex gap-1.5 mt-2 pt-2 border-t border-white/10 shrink-0" ref={emojiPickerRef}>
-
-            {/* Emoji picker panel */}
+          <div className="flex flex-col gap-1 pt-1 border-t border-white/10 shrink-0" ref={emojiPickerRef}>
+            {/* Emoji picker panel - opens downward inside container */}
             {showEmojiPicker && (
-              <div className="absolute bottom-full mb-2 left-0 z-20 bg-gray-900 border border-gray-700 rounded-xl p-2 shadow-2xl animate-popIn">
+              <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg animate-popIn">
                 <div className="grid grid-cols-4 gap-1">
                   {[
                     '😂','😊','😢','😭','😠','😉','😛','😍',
@@ -342,7 +345,7 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
                     <button
                       key={emoji}
                       onClick={() => setGeneralChatInput((prev) => prev + emoji)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-base hover:bg-gray-700 active:scale-90 transition-all"
+                      className="w-7 h-7 flex items-center justify-center rounded text-sm hover:bg-gray-700 active:scale-90 transition-all"
                     >
                       {emoji}
                     </button>
@@ -351,34 +354,37 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
               </div>
             )}
 
-            {/* Emoji toggle button */}
-            <button
-              onClick={() => setShowEmojiPicker((v) => !v)}
-              className={`px-2 py-1.5 rounded-md border text-base transition-all flex-shrink-0 ${
-                showEmojiPicker
-                  ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300'
-                  : 'bg-black/50 hover:bg-gray-800 border-white/20 text-gray-400 hover:text-yellow-300'
-              }`}
-            >
-              😊
-            </button>
+            {/* Input row */}
+            <div className="flex gap-1">
+              {/* Emoji toggle button */}
+              <button
+                onClick={() => setShowEmojiPicker((v) => !v)}
+                className={`px-1.5 py-1 rounded text-sm transition-all flex-shrink-0 ${
+                  showEmojiPicker
+                    ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300'
+                    : 'bg-black/50 hover:bg-gray-800 border border-white/20 text-gray-400 hover:text-yellow-300'
+                }`}
+              >
+                😊
+              </button>
 
-            <input
-              type="text"
-              value={generalChatInput}
-              onChange={(e) => setGeneralChatInput(e.target.value)}
-              onKeyDown={handleGeneralChatKeyDown}
-              placeholder="Chat..."
-              maxLength={100}
-              className="flex-1 px-2 py-1.5 rounded-md bg-black/50 border border-white/20 text-white placeholder-gray-500 focus:outline-none focus:border-blue-400 text-xs transition-all"
-            />
-            <button
-              onClick={sendGeneralChat}
-              disabled={!generalChatInput.trim() || sending}
-              className="px-2 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all flex-shrink-0"
-            >
-              {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-            </button>
+              <input
+                type="text"
+                value={generalChatInput}
+                onChange={(e) => setGeneralChatInput(e.target.value)}
+                onKeyDown={handleGeneralChatKeyDown}
+                placeholder="Chat..."
+                maxLength={100}
+                className="flex-1 px-2 py-1 rounded text-xs bg-black/50 border border-white/20 text-white placeholder-gray-500 focus:outline-none focus:border-blue-400 transition-all"
+              />
+              <button
+                onClick={sendGeneralChat}
+                disabled={!generalChatInput.trim() || sending}
+                className="px-1.5 py-1 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all flex-shrink-0"
+              >
+                {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -391,8 +397,8 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
               <Edit3 className={`w-3 h-3 ${isMyTurn ? 'text-green-400' : 'text-gray-400'}`} />
               <span className="flex-1">{isMyTurn ? 'Send your clue' : `Waiting for ${currentSpeaker?.name || '...'}`}</span>
               {!currentClue && (
-                <span className={`tabular-nums font-black text-xs ${
-                  countdown <= 5 ? 'text-red-400' : countdown <= 10 ? 'text-yellow-400' : 'text-gray-500'
+                <span className={`tabular-nums font-black text-xs transition-all ${
+                  countdown <= 5 ? 'text-red-400 scale-125 animate-pulse' : countdown <= 10 ? 'text-yellow-400' : 'text-gray-500'
                 }`}>
                   {countdown}s
                 </span>
@@ -503,25 +509,29 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
         </div>
       </div>
 
-      {/* BOTTOM SECTION */}
-      <div className="flex flex-col gap-2 pointer-events-auto">
+      {/* BOTTOM SECTION — centered word container */}
+      <div className="flex flex-col gap-3 pointer-events-auto items-center justify-center">
 
-        {/* My word card */}
+        {/* My word card - centered, not too wide */}
         {myPlayer && (
-          <div className="rounded-xl px-4 py-2.5 border backdrop-blur-sm flex items-center gap-3 bg-blue-950/80 border-blue-700/60">
-            <span className="text-lg">{myPlayer.is_imposter ? '🎭' : '🕵️'}</span>
-            <div className="flex-1">
-              <p className="text-xs text-gray-400 uppercase tracking-wider">
-                {myPlayer.is_imposter ? 'Sinungaling' : 'Normal na Tao'} — Your word
+          <div className={`rounded-2xl px-6 py-3.5 border backdrop-blur-md flex items-center gap-4 w-full max-w-md transition-all ${
+            wordVisible
+              ? 'bg-gradient-to-r from-blue-950/70 to-blue-900/50 border-blue-600/50 shadow-lg shadow-blue-900/30'
+              : 'bg-gradient-to-r from-gray-900/60 to-gray-950/50 border-gray-700/40'
+          }`}>
+            <span className="text-2xl">{myPlayer.is_imposter ? '🎭' : '🕵️'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">
+                {myPlayer.is_imposter ? 'Sinungaling' : 'Normal na Tao'}
               </p>
               <p
-                className="font-black text-base text-white transition-all"
-                style={{ filter: wordVisible ? 'none' : 'blur(6px)', userSelect: wordVisible ? 'auto' : 'none' }}
+                className="font-black text-lg text-white transition-all duration-200"
+                style={{ filter: wordVisible ? 'none' : 'blur(8px)', userSelect: wordVisible ? 'auto' : 'none' }}
               >
                 {myPlayer.word || '???'}
               </p>
             </div>
-            <button onClick={() => setWordVisible(!wordVisible)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+            <button onClick={() => setWordVisible(!wordVisible)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex-shrink-0">
               {wordVisible ? <EyeOff className="w-4 h-4 text-gray-300" /> : <Eye className="w-4 h-4 text-gray-300" />}
             </button>
           </div>

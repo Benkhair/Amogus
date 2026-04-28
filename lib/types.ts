@@ -17,6 +17,7 @@ export interface Player {
   avatar_color: string;
   is_imposter: boolean;
   word: string;
+  category: string;
   is_eliminated: boolean;
   is_connected: boolean;
   pos_x: number;

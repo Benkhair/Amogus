@@ -26,10 +26,29 @@ function LobbyScreen() {
   const [chatInput, setChatInput] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; playerName: string } | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const playersRef = useRef(players);
+  const previousPlayersRef = useRef(players);
+  
   useEffect(() => { playersRef.current = players; }, [players]);
+
+  // Detect when players leave
+  useEffect(() => {
+    const prevPlayers = previousPlayersRef.current;
+    const currentPlayers = players;
+
+    for (const prevPlayer of prevPlayers) {
+      const stillConnected = currentPlayers.find((p) => p.id === prevPlayer.id && p.is_connected);
+      if (!stillConnected && prevPlayer.is_connected) {
+        setNotification({ message: 'left the lobby', playerName: prevPlayer.name });
+        setTimeout(() => setNotification(null), 4000);
+      }
+    }
+
+    previousPlayersRef.current = currentPlayers;
+  }, [players]);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -167,6 +186,14 @@ function LobbyScreen() {
         </div>
         <LeaveButton />
       </div>
+
+      {/* Player left notification */}
+      {notification && (
+        <div className="mb-4 max-w-5xl mx-auto w-full px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm flex items-center gap-2 animate-slideDown">
+          <span>👋</span>
+          <span><strong>{notification.playerName}</strong> {notification.message}</span>
+        </div>
+      )}
 
       {/* Main Content - Two Columns */}
       <div className="flex-1 flex gap-4 max-w-5xl mx-auto w-full min-h-0 items-start">

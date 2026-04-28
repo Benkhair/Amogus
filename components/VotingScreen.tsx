@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Vote, CheckCircle, Loader2, Skull, Edit3 } from 'lucide-react';
@@ -21,6 +21,24 @@ export default function VotingScreen() {
   const [error, setError] = useState('');
   const [clues, setClues] = useState<Clue[]>([]);
   const [loadingClues, setLoadingClues] = useState(true);
+  const [notification, setNotification] = useState<{ message: string; playerName: string } | null>(null);
+  const previousPlayersRef = useRef(players);
+
+  // Detect when players leave
+  useEffect(() => {
+    const prevPlayers = previousPlayersRef.current;
+    const currentPlayers = players;
+
+    for (const prevPlayer of prevPlayers) {
+      const stillConnected = currentPlayers.find((p) => p.id === prevPlayer.id && p.is_connected);
+      if (!stillConnected && prevPlayer.is_connected) {
+        setNotification({ message: 'left during voting', playerName: prevPlayer.name });
+        setTimeout(() => setNotification(null), 4000);
+      }
+    }
+
+    previousPlayersRef.current = currentPlayers;
+  }, [players]);
 
   const activePlayers = players.filter((p) => !p.is_eliminated && p.is_connected);
   // Allow self-voting - include all active players
@@ -123,6 +141,14 @@ export default function VotingScreen() {
 
   return (
     <div className="cinematic-bg flex flex-col flex-1 min-h-screen px-4 py-6">
+      {/* Player left notification */}
+      {notification && (
+        <div className="mb-4 max-w-6xl mx-auto w-full px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm flex items-center gap-2 animate-slideDown">
+          <span>👋</span>
+          <span><strong>{notification.playerName}</strong> {notification.message}</span>
+        </div>
+      )}
+
       {/* Main layout: Clues on left, Voting on right */}
       <div className="flex-1 flex gap-4 max-w-6xl mx-auto w-full">
         

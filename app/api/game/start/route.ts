@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const shuffled = [...players].sort(() => Math.random() - 0.5);
   const turnOrder = shuffled.map((p) => p.id);
 
-  // Update each player with their role, word, and circular spawn position
+  // Update each player with their role, word, category, and circular spawn position
   const radius = Math.max(3, players.length * 0.8);
   for (let i = 0; i < players.length; i++) {
     const isImposter = players[i].id === players[imposterIndex].id;
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       .update({
         is_imposter: isImposter,
         word: isImposter ? wordPair.imposter : wordPair.sudlat,
+        category: wordPair.category,
         pos_x: parseFloat((Math.cos(angle) * radius).toFixed(2)),
         pos_z: parseFloat((Math.sin(angle) * radius).toFixed(2)),
       })

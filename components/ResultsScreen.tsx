@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Player } from '@/lib/types';
-import { Skull, Trophy, RotateCcw, Check, X, Clock } from 'lucide-react';
+import { Skull, Trophy, RotateCcw, Check, X, Clock, Loader2 } from 'lucide-react';
 import LeaveButton from './LeaveButton';
 
 interface ResultData {
@@ -21,12 +21,14 @@ interface PlayerResponse {
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const { room, players, isHost, myPlayer, sessionId } = useGame();
+  const { room, players, isHost, myPlayer, sessionId, gameState } = useGame();
   const [result, setResult] = useState<ResultData | null>(null);
   const [requestActive, setRequestActive] = useState(false);
   const [myResponse, setMyResponse] = useState<'pending' | 'accepted' | 'declined'>('pending');
   const [responses, setResponses] = useState<PlayerResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; playerName: string } | null>(null);
+  const previousPlayersRef = useRef(players);
 
   useEffect(() => {
     if (!players.length) return;
@@ -34,6 +36,22 @@ export default function ResultsScreen() {
     const eliminated = players.find((p) => p.is_eliminated) ?? null;
     const imposterWins = !imposter?.is_eliminated;
     setResult({ eliminatedPlayer: eliminated, imposter, imposterWins });
+  }, [players]);
+
+  // Detect when players leave
+  useEffect(() => {
+    const prevPlayers = previousPlayersRef.current;
+    const currentPlayers = players;
+
+    for (const prevPlayer of prevPlayers) {
+      const stillConnected = currentPlayers.find((p) => p.id === prevPlayer.id && p.is_connected);
+      if (!stillConnected && prevPlayer.is_connected) {
+        setNotification({ message: 'left the game', playerName: prevPlayer.name });
+        setTimeout(() => setNotification(null), 4000);
+      }
+    }
+
+    previousPlayersRef.current = currentPlayers;
   }, [players]);
 
   const doFetchResponses = async (roomId: string) => {
@@ -231,6 +249,14 @@ export default function ResultsScreen() {
           <LeaveButton />
         </div>
 
+        {/* Player left notification */}
+        {notification && (
+          <div className="mb-4 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm flex items-center gap-2 animate-slideDown">
+            <span>👋</span>
+            <span><strong>{notification.playerName}</strong> {notification.message}</span>
+          </div>
+        )}
+
         {/* Result Banner */}
         <div
           className={`relative rounded-2xl p-8 mb-6 text-center border overflow-hidden animate-bounceIn ${imposterWins ? 'bg-gradient-to-b from-red-900/40 to-red-950/40 border-red-500/40' : 'bg-gradient-to-b from-green-900/40 to-emerald-950/40 border-green-500/40'} animate-slideUp`}
@@ -410,27 +436,27 @@ export default function ResultsScreen() {
 
       {/* NON-HOST: Play Again popup modal */}
       {!isHost && requestActive && myResponse === 'pending' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-6">
-          <div className="w-full max-w-sm bg-gray-900 border border-blue-600 rounded-3xl p-8 flex flex-col items-center gap-5 shadow-2xl shadow-blue-900/40 animate-popIn">
-            <div className="text-5xl animate-bounce">🎮</div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-gradient-to-b from-blue-950/90 to-blue-950/70 border border-blue-500/40 rounded-3xl p-8 flex flex-col items-center gap-5 shadow-2xl shadow-blue-900/50 animate-popIn">
+            <div className="text-6xl animate-bounce">🎮</div>
             <div className="text-center">
-              <p className="text-white font-black text-xl mb-1">Play Again?</p>
-              <p className="text-gray-400 text-sm">The host wants to start a new game!</p>
+              <p className="text-white font-black text-2xl mb-2">Play Again?</p>
+              <p className="text-gray-300 text-sm">The host wants to start a new game!</p>
             </div>
-            <div className="flex gap-3 w-full">
+            <div className="flex gap-3 w-full pt-2">
               <button
                 onClick={() => handleRespond('accepted')}
                 disabled={loading}
                 className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
               >
-                <Check className="w-5 h-5" /> Accept
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> Accept</>}
               </button>
               <button
                 onClick={() => handleRespond('declined')}
                 disabled={loading}
                 className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
               >
-                <X className="w-5 h-5" /> Decline
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><X className="w-5 h-5" /> Decline</>}
               </button>
             </div>
           </div>
