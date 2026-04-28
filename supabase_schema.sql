@@ -103,3 +103,5 @@ alter publication supabase_realtime add table rooms;
 alter publication supabase_realtime add table players;
 alter publication supabase_realtime add table game_state;
 alter publication supabase_realtime add table votes;
+alter publication supabase_realtime add table play_again_requests;
+alter publication supabase_realtime add table play_again_responses;

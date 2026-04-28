@@ -91,11 +91,13 @@ export default function ResultsScreen() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'play_again_requests', filter: `room_id=eq.${roomId}` },
         (payload: any) => {
+          console.log('Play again request change:', payload.eventType, payload);
           if (payload.eventType === 'DELETE' || !payload.new?.id) {
             setRequestActive(false);
             setMyResponse('pending');
             setResponses([]);
           } else if (payload.new?.status === 'pending') {
+            console.log('Play again request is now pending - showing modal');
             setRequestActive(true);
             setMyResponse('pending');
             setResponses([]);
@@ -108,11 +110,13 @@ export default function ResultsScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'play_again_responses', filter: `room_id=eq.${roomId}` },
-        () => {
+        (payload: any) => {
+          console.log('Play again response change:', payload.eventType, payload);
           doFetchResponses(roomId);
         }
       )
-      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => {
+      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR', err?: any) => {
+        console.log('Play again subscription status:', status, err);
         if (status === 'SUBSCRIBED') {
           doFetchRequest(roomId);
           doFetchResponses(roomId);

@@ -23,10 +23,30 @@ export default function VotingScreen() {
   const [loadingClues, setLoadingClues] = useState(true);
 
   const activePlayers = players.filter((p) => !p.is_eliminated && p.is_connected);
-  const votablePlayers = activePlayers.filter((p) => p.id !== myPlayer?.id);
+  // Allow self-voting - include all active players
+  const votablePlayers = activePlayers;
   const myVote = votes.find((v) => v.voter_id === myPlayer?.id);
   const hasVoted = submitted || !!myVote;
   const noOneToVote = votablePlayers.length === 0;
+
+  // Get list of players who have voted
+  const votedPlayerIds = new Set(votes.map((v) => v.voter_id));
+
+  // Build map of who voted for each target (store player objects for avatar display)
+  const votersForTarget: Record<string, { id: string; name: string; color: string }[]> = {};
+  for (const vote of votes) {
+    if (!votersForTarget[vote.target_id]) {
+      votersForTarget[vote.target_id] = [];
+    }
+    const voter = players.find((p) => p.id === vote.voter_id);
+    if (voter) {
+      votersForTarget[vote.target_id].push({
+        id: voter.id,
+        name: voter.name,
+        color: voter.avatar_color || '#6366f1',
+      });
+    }
+  }
 
   // Load clues from this round
   const currentRound = gameState?.round ?? 1;
@@ -187,36 +207,64 @@ export default function VotingScreen() {
           <p className="text-gray-400 text-[10px] uppercase tracking-[0.3em] font-bold mb-4">Select the Sinungaling</p>
           <div className="flex flex-col gap-3">
             {noOneToVote && (
-              <p className="text-gray-500 text-sm text-center py-4 italic">No other players to vote for (solo test mode)</p>
+              <p className="text-gray-500 text-sm text-center py-4 italic">No players to vote for</p>
             )}
             {votablePlayers.map((p) => {
                 const voteCount = tally[p.id] || 0;
                 const isSelected = selectedTarget === p.id;
+                const hasPlayerVoted = votedPlayerIds.has(p.id);
+                const isMe = p.id === myPlayer?.id;
+                const voterList = votersForTarget[p.id] || [];
+                const showVoters = voterList.length > 0;
+
                 return (
-                  <button
-                    key={p.id}
-                    onClick={() => !hasVoted && setSelectedTarget(p.id)}
-                    disabled={hasVoted}
-                    className={`relative flex items-center gap-4 px-4 py-3 rounded-xl border text-left transition-all active:scale-95 overflow-hidden ${
-                      isSelected
-                        ? 'border-red-500/60 bg-gradient-to-r from-red-500/15 via-red-500/5 to-transparent shadow-[0_0_30px_-12px_rgba(220,38,38,0.7)]'
-                        : 'border-white/5 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/10'
-                    } disabled:cursor-default disabled:opacity-70`}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border border-white/20 shadow-lg"
-                      style={{ backgroundColor: p.avatar_color || '#6366f1', boxShadow: `0 0 22px -6px ${p.avatar_color || '#6366f1'}90` }}
+                  <div key={p.id} className="flex flex-col gap-1">
+                    <button
+                      onClick={() => !hasVoted && setSelectedTarget(p.id)}
+                      disabled={hasVoted}
+                      className={`relative flex items-center gap-4 px-4 py-3 rounded-xl border text-left transition-all active:scale-95 overflow-hidden ${
+                        isSelected
+                          ? 'border-red-500/60 bg-gradient-to-r from-red-500/15 via-red-500/5 to-transparent shadow-[0_0_30px_-12px_rgba(220,38,38,0.7)]'
+                          : 'border-white/5 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/10'
+                      } disabled:cursor-default disabled:opacity-70`}
                     >
-                      {p.name[0].toUpperCase()}
-                    </div>
-                    <span className="font-medium flex-1 text-white">{p.name}</span>
-                    {isSelected && <CheckCircle className="w-5 h-5 text-red-400" />}
-                    {voteCount > 0 && (
-                      <span className="text-[10px] uppercase tracking-widest bg-purple-500/15 text-purple-200 border border-purple-500/30 px-2 py-0.5 rounded-full tabular-nums">
-                        {voteCount} vote{voteCount > 1 ? 's' : ''}
-                      </span>
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border border-white/20 shadow-lg"
+                        style={{ backgroundColor: p.avatar_color || '#6366f1', boxShadow: `0 0 22px -6px ${p.avatar_color || '#6366f1'}90` }}
+                      >
+                        {p.name[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <span className="font-medium text-white">{p.name}</span>
+                        {isMe && <span className="ml-2 text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded">You</span>}
+                        {hasPlayerVoted && <span className="ml-2 text-[10px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded">✓ Voted</span>}
+                      </div>
+                      {isSelected && <CheckCircle className="w-5 h-5 text-red-400" />}
+                      {voteCount > 0 && (
+                        <span className="text-[10px] uppercase tracking-widest bg-purple-500/15 text-purple-200 border border-purple-500/30 px-2 py-0.5 rounded-full tabular-nums">
+                          {voteCount} vote{voteCount > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </button>
+                    {/* Show who voted for this player - avatar icons */}
+                    {showVoters && (
+                      <div className="ml-14 flex items-center gap-1.5">
+                        <span className="text-[10px] text-gray-500 mr-1">Voted by:</span>
+                        <div className="flex items-center -space-x-1.5">
+                          {voterList.map((voter) => (
+                            <div
+                              key={voter.id}
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-gray-800"
+                              style={{ backgroundColor: voter.color }}
+                              title={voter.name}
+                            >
+                              {voter.name[0].toUpperCase()}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
           </div>

@@ -32,8 +32,22 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
   const [loadingTime, setLoadingTime] = useState(0);
   const [myClue, setMyClue] = useState<string>('');
   const [countdown, setCountdown] = useState<number>(TURN_DURATION);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const hasAutoSkipped = useRef(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close emoji picker on click outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
 
   const turnIndex = gameState?.current_turn_index ?? 0;
   const totalTurns = gameState?.turn_order?.length ?? 0;
@@ -314,7 +328,41 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
             <div ref={chatEndRef} />
           </div>
           {/* Chat input for all players */}
-          <div className="flex gap-1.5 mt-2 pt-2 border-t border-white/10 shrink-0">
+          <div className="relative flex gap-1.5 mt-2 pt-2 border-t border-white/10 shrink-0" ref={emojiPickerRef}>
+
+            {/* Emoji picker panel */}
+            {showEmojiPicker && (
+              <div className="absolute bottom-full mb-2 left-0 z-20 bg-gray-900 border border-gray-700 rounded-xl p-2 shadow-2xl animate-popIn">
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    '😂','😊','😢','😭','😠','😉','😛','😍',
+                    '😎','🤔','😅','🥹','😤','🤣','😇','🫡',
+                    '👍','👎','🔥','👻',
+                  ].map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => setGeneralChatInput((prev) => prev + emoji)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-base hover:bg-gray-700 active:scale-90 transition-all"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Emoji toggle button */}
+            <button
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              className={`px-2 py-1.5 rounded-md border text-base transition-all flex-shrink-0 ${
+                showEmojiPicker
+                  ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300'
+                  : 'bg-black/50 hover:bg-gray-800 border-white/20 text-gray-400 hover:text-yellow-300'
+              }`}
+            >
+              😊
+            </button>
+
             <input
               type="text"
               value={generalChatInput}
@@ -327,7 +375,7 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
             <button
               onClick={sendGeneralChat}
               disabled={!generalChatInput.trim() || sending}
-              className="px-2 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
+              className="px-2 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all flex-shrink-0"
             >
               {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
             </button>
