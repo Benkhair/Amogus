@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Player } from '@/lib/types';
-import { Skull, Trophy, RotateCcw, Check, X, Clock, Loader2 } from 'lucide-react';
+import { Skull, RotateCcw, Check, X, Clock, Loader2 } from 'lucide-react';
 import LeaveButton from './LeaveButton';
 
 interface ResultData {
@@ -21,7 +21,7 @@ interface PlayerResponse {
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const { room, players, isHost, myPlayer, sessionId, gameState } = useGame();
+  const { room, players, isHost, myPlayer, sessionId } = useGame();
   const [result, setResult] = useState<ResultData | null>(null);
   const [requestActive, setRequestActive] = useState(false);
   const [myResponse, setMyResponse] = useState<'pending' | 'accepted' | 'declined'>('pending');
@@ -92,7 +92,6 @@ export default function ResultsScreen() {
         setRequestActive(true);
       } else {
         setRequestActive(false);
-        // Reset my response if request is no longer pending
         if (data?.status !== 'pending' && myResponse !== 'pending') {
           setMyResponse('pending');
         }
@@ -102,7 +101,7 @@ export default function ResultsScreen() {
     }
   };
 
-  // Create the realtime channel ONCE when room.id is known — never recreate it
+  // Create the realtime channel when room.id is known
   useEffect(() => {
     if (!room?.id) return;
     const roomId = room.id;
@@ -127,7 +126,6 @@ export default function ResultsScreen() {
             setMyResponse('pending');
             setResponses([]);
           } else {
-            // Status changed from pending to something else (completed, cancelled, etc.)
             setRequestActive(false);
           }
         }
@@ -135,13 +133,12 @@ export default function ResultsScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'play_again_responses', filter: `room_id=eq.${roomId}` },
-        (payload: { eventType: string; new: { id?: string; status?: string } | null }) => {
-          console.log('Play again response change:', payload.eventType, payload);
+        () => {
           doFetchResponses(roomId);
         }
       )
-      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR', err?: Error) => {
-        console.log('Play again subscription status:', status, err);
+      .subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => {
+        console.log('Play again subscription status:', status);
         if (status === 'SUBSCRIBED') {
           doFetchRequest(roomId);
           doFetchResponses(roomId);
@@ -151,7 +148,7 @@ export default function ResultsScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.id]);
 
   // Host: send play again request
@@ -168,10 +165,10 @@ export default function ResultsScreen() {
       const data = await res.json();
       if (!res.ok) {
         console.error('Error creating request:', data.error);
-        alert(data.error || 'Failed to create play again request. Please try again.');
+        alert(data.error || 'Failed to create play again request.');
         return;
       }
-      
+
       setRequestActive(true);
       setResponses([]);
       setMyResponse('pending');
@@ -197,10 +194,10 @@ export default function ResultsScreen() {
       const data = await res.json();
       if (!res.ok) {
         console.error('Error recording response:', data.error);
-        alert(data.error || 'Failed to record response. Please try again.');
+        alert(data.error || 'Failed to record response.');
         return;
       }
-      
+
       setMyResponse(response);
       if (response === 'declined') {
         router.push('/');
@@ -249,202 +246,191 @@ export default function ResultsScreen() {
   const allResponded = nonHostPlayers.length > 0 && pendingCount === 0;
 
   return (
-    <div className="cinematic-bg flex flex-col flex-1 items-center justify-center min-h-screen px-4 py-6">
-      <div className="w-full max-w-lg">
-        {/* Top bar */}
-        <div className="flex justify-end mb-4">
-          <LeaveButton />
-        </div>
-
-        {/* Player left notification */}
-        {notification && (
-          <div className="mb-4 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm flex items-center gap-2 animate-slideDown">
-            <span>👋</span>
-            <span><strong>{notification.playerName}</strong> {notification.message}</span>
-          </div>
-        )}
-
-        {/* Result Banner */}
-        <div
-          className={`relative rounded-2xl p-8 mb-6 text-center border overflow-hidden animate-bounceIn ${imposterWins ? 'bg-gradient-to-b from-red-900/40 to-red-950/40 border-red-500/40' : 'bg-gradient-to-b from-green-900/40 to-emerald-950/40 border-green-500/40'} animate-slideUp`}
-          style={{
-            boxShadow: imposterWins
-              ? '0 30px 80px -30px rgba(220,38,38,0.55), inset 0 1px 0 rgba(255,255,255,0.05)'
-              : '0 30px 80px -30px rgba(34,197,94,0.55), inset 0 1px 0 rgba(255,255,255,0.05)',
-          }}
-        >
-          <div className={`pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[340px] h-[340px] rounded-full blur-3xl ${imposterWins ? 'bg-red-600/25' : 'bg-emerald-500/25'} animate-glowPulse`} />
-          <div className="text-6xl mb-4">{imposterWins ? '🎭' : '🎉'}</div>
-          <h1 className={`text-4xl font-black mb-2 ${imposterWins ? 'text-red-400' : 'text-green-400'}`}>
-            {imposterWins ? 'Sinungaling Wins!' : 'Normal na Tao Wins!'}
-          </h1>
-          <p className="text-gray-300 text-lg">
-            {imposterWins
-              ? 'The Sinungaling successfully blended in!'
-              : 'The crew found the Sinungaling!'}
-          </p>
-        </div>
-
-        {/* Reveal Cards */}
-        <div className="grid grid-cols-2 gap-4 mb-6 animate-slideUp" style={{ animationDelay: '0.15s' }}>
-          <div className="glass-panel rounded-2xl p-5">
-            <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">Eliminated</p>
-            {result?.eliminatedPlayer ? (
-              <>
-                <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-black text-white border border-white/20 mb-2" style={{ backgroundColor: result.eliminatedPlayer.avatar_color || '#6366f1' }}>
-                  {result.eliminatedPlayer.name[0].toUpperCase()}
-                </div>
-                <p className="font-bold" style={{ color: result.eliminatedPlayer.avatar_color || '#ffffff' }}>{result.eliminatedPlayer.name}</p>
-                <p className="text-gray-500 text-xs mt-1">
-                  {result.eliminatedPlayer.is_imposter ? '🎭 Sinungaling' : '🕵️ Normal na Tao'}
-                </p>
-              </>
-            ) : (
-              <p className="text-gray-500 text-sm">No one eliminated</p>
-            )}
+    <>
+      <div className="cinematic-bg flex flex-col flex-1 items-center justify-center min-h-screen px-4 py-6">
+        <div className="w-full max-w-lg">
+          {/* Top bar */}
+          <div className="flex justify-end mb-4">
+            <LeaveButton />
           </div>
 
-          <div className="glass-panel rounded-2xl p-5" style={{ boxShadow: '0 0 30px -12px rgba(220,38,38,0.4), inset 0 1px 0 rgba(255,255,255,0.04)' }}>
-            <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">The Sinungaling</p>
-            {result?.imposter ? (
-              <>
-                <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center mb-2">
-                  <Skull className="w-6 h-6 text-white" />
-                </div>
-                <p className="font-bold" style={{ color: result.imposter.avatar_color || '#ffffff' }}>{result.imposter.name}</p>
-                <p className="text-red-400 text-xs mt-1">Word: {result.imposter.word}</p>
-              </>
-            ) : (
-              <p className="text-gray-500 text-sm">Unknown</p>
-            )}
-          </div>
-        </div>
+          {/* Player left notification */}
+          {notification && (
+            <div className="mb-4 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm flex items-center gap-2 animate-slideDown">
+              <span>👋</span>
+              <span><strong>{notification.playerName}</strong> {notification.message}</span>
+            </div>
+          )}
 
-        {/* All Players Reveal */}
-        <div className="glass-panel rounded-2xl p-5 mb-6 animate-slideUp" style={{ animationDelay: '0.25s' }}>
-          <p className="text-gray-400 text-xs uppercase tracking-wider mb-4">All Players</p>
-          <div className="flex flex-col gap-2">
-            {players.map((p) => (
-              <div
-                key={p.id}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-                  p.is_imposter ? 'border-red-700/50 bg-red-900/10' : 'border-gray-800 bg-gray-800/30'
-                }`}
-              >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white border border-white/20"
-                  style={{ backgroundColor: p.is_imposter ? '#dc2626' : (p.avatar_color || '#6366f1') }}
-                >
-                  {p.is_imposter ? <Skull className="w-4 h-4" /> : p.name[0].toUpperCase()}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium" style={{ color: p.avatar_color || '#ffffff' }}>{p.name}</p>
-                  <p className="text-gray-500 text-xs">
-                    {p.is_imposter ? '🎭 Sinungaling' : '🕵️ Normal na Tao'} — <span className="text-gray-400">{p.word}</span>
+          {/* Result Banner */}
+          <div
+            className={`relative rounded-2xl p-8 mb-6 text-center border overflow-hidden animate-bounceIn ${imposterWins ? 'bg-gradient-to-b from-red-900/40 to-red-950/40 border-red-500/40' : 'bg-gradient-to-b from-green-900/40 to-emerald-950/40 border-green-500/40'} animate-slideUp`}
+            style={{
+              boxShadow: imposterWins
+                ? '0 30px 80px -30px rgba(220,38,38,0.55), inset 0 1px 0 rgba(255,255,255,0.05)'
+                : '0 30px 80px -30px rgba(34,197,94,0.55), inset 0 1px 0 rgba(255,255,255,0.05)',
+            }}
+          >
+            <div className={`pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[340px] h-[340px] rounded-full blur-3xl ${imposterWins ? 'bg-red-600/25' : 'bg-emerald-500/25'} animate-glowPulse`} />
+            <div className="text-6xl mb-4">{imposterWins ? '🎭' : '🎉'}</div>
+            <h1 className={`text-4xl font-black mb-2 ${imposterWins ? 'text-red-400' : 'text-green-400'}`}>
+              {imposterWins ? 'Sinungaling Wins!' : 'Normal na Tao Wins!'}
+            </h1>
+            <p className="text-gray-300 text-lg">
+              {imposterWins
+                ? 'The Sinungaling successfully blended in!'
+                : 'The crew found the Sinungaling!'}
+            </p>
+          </div>
+
+          {/* Eliminated / Imposter Cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6 animate-slideUp" style={{ animationDelay: '0.15s' }}>
+            <div className="glass-panel rounded-2xl p-5">
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">Eliminated</p>
+              {result?.eliminatedPlayer ? (
+                <>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-black text-white border border-white/20 mb-2" style={{ backgroundColor: result.eliminatedPlayer.avatar_color || '#6366f1' }}>
+                    {result.eliminatedPlayer.name[0].toUpperCase()}
+                  </div>
+                  <p className="font-bold" style={{ color: result.eliminatedPlayer.avatar_color || '#ffffff' }}>{result.eliminatedPlayer.name}</p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {result.eliminatedPlayer.is_imposter ? '🎭 Sinungaling' : '🕵️ Normal na Tao'}
                   </p>
-                </div>
-                {p.is_eliminated && (
-                  <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full">
-                    Eliminated
-                  </span>
-                )}
-                {!p.is_eliminated && !p.is_imposter && (
-                  <Trophy className="w-4 h-4 text-yellow-400" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+                </>
+              ) : (
+                <p className="text-gray-500 text-sm">No one eliminated</p>
+              )}
+            </div>
 
-        {/* HOST: Play Again panel */}
-        {isHost && requestActive && (
-          <div className="glass-panel rounded-2xl p-5 mb-4 animate-slideUp">
-            {requestActive && (
-              <>
-                <p className="text-white font-semibold text-center mb-4">Waiting for responses…</p>
-                <div className="flex justify-center gap-6 mb-4">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-2xl font-black text-green-400">{agreedCount}</span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1"><Check className="w-3 h-3 text-green-400" /> Agreed</span>
+            <div className="glass-panel rounded-2xl p-5" style={{ boxShadow: '0 0 30px -12px rgba(220,38,38,0.4), inset 0 1px 0 rgba(255,255,255,0.04)' }}>
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">The Sinungaling</p>
+              {result?.imposter ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center mb-2">
+                    <Skull className="w-6 h-6 text-white" />
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-2xl font-black text-red-400">{declinedCount}</span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1"><X className="w-3 h-3 text-red-400" /> Declined</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-2xl font-black text-yellow-400">{pendingCount}</span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3 text-yellow-400" /> Pending</span>
-                  </div>
-                </div>
-                {allResponded && agreedCount > 0 && (
-                  <button
-                    onClick={handleStartNewGame}
-                    disabled={loading}
-                    className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold transition-colors flex items-center justify-center gap-2 mb-2"
+                  <p className="font-bold" style={{ color: result.imposter.avatar_color || '#ffffff' }}>{result.imposter.name}</p>
+                  <p className="text-red-400 text-xs mt-1">Word: {result.imposter.word}</p>
+                </>
+              ) : (
+                <p className="text-gray-500 text-sm">Unknown</p>
+              )}
+            </div>
+          </div>
+
+          {/* All Players Reveal */}
+          <div className="glass-panel rounded-2xl p-5 mb-6 animate-slideUp" style={{ animationDelay: '0.25s' }}>
+            <p className="text-gray-400 text-xs uppercase tracking-wider mb-4">All Players</p>
+            <div className="flex flex-col gap-2">
+              {players.map((p) => (
+                <div
+                  key={p.id}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                    p.is_imposter ? 'border-red-700/50 bg-red-900/10' : 'border-gray-800 bg-gray-800/30'
+                  }`}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white border border-white/20"
+                    style={{ backgroundColor: p.is_imposter ? '#dc2626' : (p.avatar_color || '#6366f1') }}
                   >
-                    <RotateCcw className="w-5 h-5" /> Start New Game ({agreedCount} joining)
-                  </button>
-                )}
-                {allResponded && agreedCount === 0 && (
-                  <p className="text-center text-red-400 text-sm font-semibold mb-2">Everyone declined.</p>
-                )}
-                {!allResponded && (
-                  <p className="text-center text-gray-500 text-xs">Waiting for {pendingCount} more player{pendingCount !== 1 ? 's' : ''} to respond…</p>
-                )}
+                    {p.is_imposter ? '🎭' : p.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate" style={{ color: p.avatar_color || '#ffffff' }}>{p.name}</p>
+                    <p className="text-xs text-gray-400">{p.is_imposter ? '🎭 Sinungaling' : '🕵️ Normal na Tao'}</p>
+                  </div>
+                  {p.is_imposter && <span className="text-xs text-red-400 font-medium">Word: {p.word}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Host: Play Again request status */}
+          {isHost && requestActive && (
+            <div className="glass-panel rounded-2xl p-5 mb-6 animate-slideUp" style={{ animationDelay: '0.35s' }}>
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-4">Play Again Responses</p>
+              <div className="flex justify-around mb-4">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-2xl font-black text-green-400">{agreedCount}</span>
+                  <span className="text-xs text-gray-400 flex items-center gap-1"><Check className="w-3 h-3 text-green-400" /> Agreed</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-2xl font-black text-red-400">{declinedCount}</span>
+                  <span className="text-xs text-gray-400 flex items-center gap-1"><X className="w-3 h-3 text-red-400" /> Declined</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-2xl font-black text-yellow-400">{pendingCount}</span>
+                  <span className="text-xs text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3 text-yellow-400" /> Pending</span>
+                </div>
+              </div>
+              {allResponded && agreedCount > 0 && (
+                <button
+                  onClick={handleStartNewGame}
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold transition-colors flex items-center justify-center gap-2 mb-2"
+                >
+                  <RotateCcw className="w-5 h-5" /> Start New Game ({agreedCount} joining)
+                </button>
+              )}
+              {allResponded && agreedCount === 0 && (
+                <p className="text-center text-red-400 text-sm font-semibold mb-2">Everyone declined.</p>
+              )}
+              {!allResponded && (
+                <p className="text-center text-gray-500 text-xs">Waiting for {pendingCount} more player{pendingCount !== 1 ? 's' : ''} to respond…</p>
+              )}
+            </div>
+          )}
+
+          {/* NON-HOST: accepted waiting state (inline) */}
+          {!isHost && requestActive && myResponse === 'accepted' && (
+            <div className="bg-green-950/60 border border-green-700/50 rounded-2xl p-4 mb-4 text-center">
+              <p className="text-green-400 font-semibold">✓ You agreed to play again. Waiting for host to start…</p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            {isHost ? (
+              <>
+                <button
+                  onClick={handlePlayAgain}
+                  disabled={loading || requestActive}
+                  className={`relative flex-1 py-3 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 overflow-hidden ${
+                    requestActive
+                      ? 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-red-600 to-red-500 shadow-[0_10px_40px_-12px_rgba(220,38,38,0.65)] hover:shadow-[0_10px_40px_-6px_rgba(220,38,38,0.85)]'
+                  }`}
+                >
+                  {!requestActive && !loading && (
+                    <span className="pointer-events-none absolute inset-0 rounded-xl glow-ring-red opacity-40 animate-glowPulse" />
+                  )}
+                  <span className="relative flex items-center gap-2">
+                    <RotateCcw className="w-5 h-5" /> {requestActive ? 'Request Sent' : 'Play Again'}
+                  </span>
+                </button>
+                <button
+                  onClick={handleLeave}
+                  className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
+                >
+                  Leave Room
+                </button>
               </>
-            )}
-          </div>
-        )}
-
-        {/* NON-HOST: accepted waiting state (inline) */}
-        {!isHost && requestActive && myResponse === 'accepted' && (
-          <div className="bg-green-950/60 border border-green-700/50 rounded-2xl p-4 mb-4 text-center">
-            <p className="text-green-400 font-semibold">✓ You agreed to play again. Waiting for host to start…</p>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          {isHost ? (
-            <>
-              <button
-                onClick={handlePlayAgain}
-                disabled={loading || requestActive}
-                className={`relative flex-1 py-3 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 overflow-hidden ${
-                  requestActive
-                    ? 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-red-600 to-red-500 shadow-[0_10px_40px_-12px_rgba(220,38,38,0.65)] hover:shadow-[0_10px_40px_-6px_rgba(220,38,38,0.85)]'
-                }`}
-              >
-                {!requestActive && !loading && (
-                  <span className="pointer-events-none absolute inset-0 rounded-xl glow-ring-red opacity-40 animate-glowPulse" />
-                )}
-                <span className="relative flex items-center gap-2">
-                  <RotateCcw className="w-5 h-5" /> {requestActive ? 'Request Sent' : 'Play Again'}
-                </span>
-              </button>
+            ) : (
               <button
                 onClick={handleLeave}
-                className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
+                className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
               >
                 Leave Room
               </button>
-            </>
-          ) : (
-            <button
-              onClick={handleLeave}
-              className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold transition-all"
-            >
-              Leave Room
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* NON-HOST: Play Again popup modal */}
+      {/* NON-HOST: Play Again popup modal - OUTSIDE all containers for proper centering */}
       {!isHost && requestActive && myResponse === 'pending' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-gradient-to-b from-blue-950/90 to-blue-950/70 border border-blue-500/40 rounded-3xl p-8 flex flex-col items-center gap-5 shadow-2xl shadow-blue-900/50 animate-popIn">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md">
+          <div className="w-full max-w-sm mx-4 bg-gradient-to-b from-blue-950/95 to-blue-950/80 border border-blue-500/50 rounded-3xl p-8 flex flex-col items-center gap-5 shadow-2xl shadow-blue-900/50 animate-popIn">
             <div className="text-6xl animate-bounce">🎮</div>
             <div className="text-center">
               <p className="text-white font-black text-2xl mb-2">Play Again?</p>
@@ -469,6 +455,6 @@ export default function ResultsScreen() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

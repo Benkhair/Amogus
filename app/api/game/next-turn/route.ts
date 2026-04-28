@@ -35,10 +35,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only the current speaker or host can advance the turn' }, { status: 403 });
   }
 
-  let turnOrder = [...gs.turn_order];
+  // Get all players in turn order and filter out disconnected ones
+  const { data: allPlayers } = await supabase
+    .from('players')
+    .select('id, is_connected')
+    .in('id', gs.turn_order);
+  
+  const connectedPlayerIds = new Set(
+    allPlayers?.filter(p => p.is_connected).map(p => p.id) || []
+  );
+  
+  // Filter turn order to only include connected players
+  let turnOrder = gs.turn_order.filter((id: string) => connectedPlayerIds.has(id));
+  
+  // Find current speaker's position in filtered turn order
+  const currentIndexInFiltered = turnOrder.indexOf(currentSpeakerId);
 
   // Handle skip system - each player gets 1 skip
-  if (skip && currentSpeakerId) {
+  if (skip && currentSpeakerId && currentIndexInFiltered !== -1) {
     // Check if player has already used their skip
     const { data: currentPlayer } = await supabase
       .from('players')
@@ -59,7 +73,9 @@ export async function POST(req: NextRequest) {
     // If already skipped, they don't get another chance - move to next player
   }
 
-  const nextIndex = gs.current_turn_index + 1;
+  // Calculate next index based on filtered turn order
+  const effectiveCurrentIndex = currentIndexInFiltered !== -1 ? currentIndexInFiltered : 0;
+  const nextIndex = effectiveCurrentIndex + 1;
   const allDone = nextIndex >= turnOrder.length;
 
   if (allDone) {

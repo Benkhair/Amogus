@@ -139,7 +139,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .from('players')
         .select('*')
         .eq('room_id', room.id)
-        .eq('is_eliminated', false);
+        .eq('is_eliminated', false)
+        .eq('is_connected', true);
       if (error) {
         console.error('Error refreshing players:', error);
         return;
