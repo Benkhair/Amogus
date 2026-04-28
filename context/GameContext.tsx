@@ -135,7 +135,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const refreshPlayers = useCallback(async () => {
     if (!room) return;
     try {
-      const { data, error } = await supabase.rpc('get_players_for_room', { p_room_id: room.id });
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', room.id)
+        .eq('is_eliminated', false);
       if (error) {
         console.error('Error refreshing players:', error);
         return;
@@ -335,15 +339,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Connection Status Indicator */}
       {room && connectionStatus !== 'connected' && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-          <div className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ${
+        <div className="fixed bottom-4 left-4 z-50">
+          <div className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
             connectionStatus === 'connecting' ? 'bg-yellow-600/90 text-white' :
             connectionStatus === 'error' ? 'bg-red-600/90 text-white' :
             'bg-gray-600/90 text-white'
           }`}>
             {connectionStatus === 'connecting' && (
               <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-1.5 h-1.5 border border-white border-t-2 rounded-full animate-spin" />
                 Connecting...
               </>
             )}
