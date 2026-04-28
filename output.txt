@@ -1,0 +1,376 @@
+# 🔍 Sinungaling (Sudlat) — Full-Stack Audit Report
+
+**Project:** Amogus-main (Sinungaling)  
+**Supabase Project:** Sudlat (`nemibwsddchdhasbripf`) — ap-southeast-2  
+**Stack:** Next.js 16.2.4 + Supabase Realtime + LiveKit  
+**Date:** 2026-04-28
+
+---
+
+## Summary
+
+| Area | Critical | High | Medium | Low |
+|------|----------|------|--------|-----|
+| 🎮 Game Logic | 2 | 2 | 1 | — |
+| 🔒 Security | 1 | 2 | 1 | — |
+| ⚡ Performance | — | 1 | 2 | 1 |
+| 🖥️ Frontend | — | 2 | 3 | 2 |
+| 🔧 Backend API | 1 | 2 | 1 | — |
+| 🗄️ Database | — | 1 | 1 | 1 |
+| **Total** | **4** | **10** | **9** | **4** |
+
+---
+
+## 🚨 CRITICAL Issues
+
+### C1. Vote Tally Tie-Breaking Is Broken
+**File:** [vote/route.ts](file:///c:/Users/Admin/Desktop/Amogus-main/app/api/game/vote/route.ts#L48-L49)
+
+```typescript
+const maxVotes = Math.max(...Object.values(tally));
+const eliminated = Object.entries(tally).find(([, count]) => count === maxVotes)?.[0];
+```
+
+**Problem:** When there's a **tie**, `.find()` returns the first match arbitrarily (insertion order). This means the eliminated player is **non-deterministic** and inconsistent across clients. A 3-way tie still eliminates someone — there's no tie-breaking rule.
+
+**Impact:** Unfair eliminations, player frustration.  
+**Fix:** If multiple players share the max votes, either: (a) nobody is eliminated, (b) run a runoff vote, or (c) random elimination with clear communication.
+
+---
+
+### C2. Imposter Word Exposed to All Clients
+**File:** [ResultsScreen.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/components/ResultsScreen.tsx#L306)
+
+```tsx
+<p className="text-red-400 text-xs mt-1">Word: {result.imposter.word}</p>
+```
+
+And in the "All Players" section (line 334):
+```tsx
+<span className="text-gray-400">{p.word}</span>
+```
+
+**Problem:** This is fine for the results screen. However, the `players` table has RLS `SELECT (true)`, which means **any client can query any player's word at any time during the game**, not just after results. The word column is fetched via `refreshPlayers()` in GameContext which does `select('*')`.
+
+**Impact:** A cheating player can open DevTools → Network tab → read the Supabase response to see everyone's words mid-game.
+
+**Fix:** Either: (a) use a Postgres function/view that omits `word` and `is_imposter` unless `game_state.current_phase = 'results'`, or (b) move word assignment to a server-only table, or (c) restrict the `SELECT` policy on `players` to exclude sensitive columns.
+
+---
+
+### C3. Server Client Uses Anon Key (No Service Role)
+**File:** [server.ts](file:///c:/Users/Admin/Desktop/Amogus-main/lib/supabase/server.ts)
+
+```typescript
+export function createServerClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!  // ← Should be SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+```
+
+**Problem:** Server-side API routes (game/start, game/vote, etc.) use the **anon key**, meaning they go through RLS. Since all RLS policies are `USING (true)` / `WITH CHECK (true)`, this works by coincidence. But it means:
+1. Server operations have no more privilege than the client
+2. If you ever tighten RLS (which you should), all server routes will break
+3. Game-critical operations (word assignment, elimination) should bypass RLS
+
+**Fix:** Use `SUPABASE_SERVICE_ROLE_KEY` for server-side operations and tighten client-facing RLS.
+
+---
+
+### C4. Race Condition in Vote Tallying
+**File:** [vote/route.ts](file:///c:/Users/Admin/Desktop/Amogus-main/app/api/game/vote/route.ts#L25-L39)
+
+```typescript
+// Two separate queries — not atomic
+const { data: activePlayers } = await supabase.from('players')...
+const { data: currentVotes } = await supabase.from('votes')...
+const allVoted = currentVotes.length >= activePlayers.length;
+```
+
+**Problem:** Two concurrent vote submissions can both see `allVoted = true` and **both trigger elimination + phase change**. The second write overwrites `game_state` with the same values (benign), but `is_eliminated` could be set twice, and the response contains duplicate elimination results sent to different clients.
+
+**Fix:** Use a Postgres function with `SELECT ... FOR UPDATE` on `game_state`, or use an advisory lock, or add an `IF current_phase = 'voting'` guard to the update.
+
+---
+
+## 🔴 HIGH Issues
+
+### H1. 17 Overly Permissive RLS Policies
+**Source:** Supabase Security Advisor
+
+Every table has `USING (true)` / `WITH CHECK (true)` for INSERT, UPDATE, and DELETE. This means **any anonymous user with the Supabase anon key can**:
+- Create rooms and players without going through the API
+- Update any player's word, imposter status, or elimination flag
+- Delete votes, chat messages, or game state
+- Modify room host_id to hijack rooms
+
+| Table | Affected Operations |
+|-------|-------------------|
+| `rooms` | INSERT, UPDATE |
+| `players` | INSERT, UPDATE |
+| `game_state` | INSERT, UPDATE |
+| `votes` | INSERT, UPDATE, DELETE |
+| `chat_messages` | INSERT |
+| `play_again_requests` | INSERT, UPDATE, DELETE |
+| `play_again_responses` | INSERT, UPDATE, DELETE |
+| `feedback` | INSERT |
+
+**Remediation:** [Supabase RLS Docs](https://supabase.com/docs/guides/database/database-linter?lint=0024_permissive_rls_policy)
+
+---
+
+### H2. No Heartbeat Validation — Anyone Can Fake Connection Status
+**File:** [heartbeat/route.ts](file:///c:/Users/Admin/Desktop/Amogus-main/app/api/room/heartbeat/route.ts)
+
+```typescript
+const { playerId, connected } = await req.json();
+// No validation that the caller owns this playerId
+await supabase.from('players').update({ is_connected: connected }).eq('id', playerId);
+```
+
+**Problem:** Anyone who knows a `playerId` (visible in network requests) can set another player as disconnected, causing them to be excluded from voting and game start.
+
+---
+
+### H3. `handleStartNewGame` Runs on Client with Anon Key
+**File:** [ResultsScreen.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/components/ResultsScreen.tsx#L210-L241)
+
+The "Start New Game" flow performs **7 database mutations directly from the client**: resetting players, deleting chat messages, updating game_state, rooms, votes, and play_again data. These should be a single server-side API call to ensure atomicity and authorization (only host should trigger this).
+
+---
+
+### H4. Word History Stored In Server Memory (Volatile)
+**File:** [words.ts](file:///c:/Users/Admin/Desktop/Amogus-main/lib/words.ts#L91)
+
+```typescript
+const roomHistory = new Map<string, string[]>();
+```
+
+**Problem:** This in-memory Map is per-process and will be lost on:
+- Server restart / redeployment
+- Edge/serverless cold starts
+- Multi-instance deployments (each instance has its own history)
+
+**Impact:** Low — just causes occasional word repeats. But it also **leaks memory** since entries are never cleaned up when rooms are deleted.
+
+---
+
+### H5. LobbyScreen Realtime Subscription Recreated on Every Player Change
+**File:** [LobbyScreen.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/components/LobbyScreen.tsx#L99)
+
+```typescript
+}, [room?.id, players]);  // ← `players` array changes on every realtime update
+```
+
+**Problem:** The `players` dependency causes the channel to be torn down and recreated every time any player joins/leaves/updates. This creates a cascade: player update → subscription recreated → history reloaded → brief message gap.
+
+**Fix:** Remove `players` from the dependency array. Use a ref for the player lookup inside the callback.
+
+---
+
+### H6. No Input Sanitization / XSS in Chat
+**Files:** Chat messages are rendered directly:
+```tsx
+{m.text}
+```
+
+While React auto-escapes JSX, the messages are inserted into styled divs without length validation on the client side (only 120 chars on server). There's no profanity filter, rate limiting, or abuse prevention. A player could spam the chat endpoint rapidly.
+
+---
+
+## 🟡 MEDIUM Issues
+
+### M1. 6 Missing Foreign Key Indexes
+**Source:** Supabase Performance Advisor
+
+| Table | FK Column | Missing Index |
+|-------|-----------|---------------|
+| `chat_messages` | `player_id` | ✗ |
+| `chat_messages` | `room_id` | ✗ |
+| `play_again_responses` | `player_id` | ✗ |
+| `players` | `room_id` | ✗ |
+| `votes` | `target_id` | ✗ |
+| `votes` | `voter_id` | ✗ (covered by composite unique) |
+
+**Impact:** Slower JOINs and cascade deletes as data grows.  
+**Remediation:** [Supabase Docs](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys)
+
+---
+
+### M2. Room Page Double-Loads Data
+**File:** [page.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/app/room/%5Bcode%5D/page.tsx#L32-L83)
+
+The room page loads data in `useEffect` (lines 32-76), then immediately triggers `refreshPlayers()` and `refreshGameState()` again via the second `useEffect` (lines 78-83) when `room.id` is set. Combined with `setupSubscriptions` which also calls these after SUBSCRIBED, players/gameState are fetched **3 times** on initial load.
+
+---
+
+### M3. `GameProvider` Wraps Entire App — State Persists Across Rooms
+**File:** [layout.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/app/layout.tsx#L32)
+
+```tsx
+<GameProvider>{children}</GameProvider>
+```
+
+The `GameProvider` is at the root layout level. If a user navigates from one room to the home page and back to a different room, stale state from the previous room might flash briefly before being replaced. The realtime channel from the old room also stays subscribed until the new room's `setupSubscriptions` cleans it up.
+
+---
+
+### M4. Eliminated Players Can Still Chat During Voting Phase
+**File:** [chat/route.ts](file:///c:/Users/Admin/Desktop/Amogus-main/app/api/game/chat/route.ts)
+
+The chat API only validates that the game is in `speaking` phase and that clues come from the current speaker. There's no check for whether the sender is eliminated or disconnected. An eliminated player could send chat messages if they're still on the page.
+
+---
+
+### M5. No Room Expiration / Cleanup
+**Database:** 137 rooms, 315 players, 674 chat messages accumulating.
+
+There's no mechanism to:
+- Auto-expire rooms after inactivity
+- Clean up ended rooms
+- Purge old chat messages
+
+This will cause unbounded data growth and slow down queries over time.
+
+---
+
+### M6. `refreshVotes` Depends on Stale `gameState`
+**File:** [GameContext.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/context/GameContext.tsx#L126-L142)
+
+```typescript
+const refreshVotes = useCallback(async () => {
+  if (!room || !gameState) return;  // gameState could be stale
+  ...
+  .eq('round', gameState.round);    // uses potentially stale round
+}, [room, gameState]);
+```
+
+When `setupSubscriptions` calls `refreshVotes()` inside the SUBSCRIBED callback, it captures the `gameState` from when `setupSubscriptions` was created (potentially `null` or from a previous round). This could fetch votes for the wrong round.
+
+---
+
+### M7. Duplicate Chat Messages from Realtime + API Response
+**File:** [TurnOverlay.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/components/TurnOverlay.tsx#L114-L143)
+
+The component loads messages via `supabase.from('chat_messages').select(...)` (lines 88-112) AND subscribes to realtime INSERT events (lines 114-143). When the user sends a message, the INSERT event fires before or after the initial load completes, potentially showing the same message twice. There's no deduplication by message ID.
+
+---
+
+## 🟢 LOW Issues
+
+### L1. `VotingSplashScreen` `onDone` in Deps Can Cause Re-renders
+**File:** [VotingSplashScreen.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/components/VotingSplashScreen.tsx#L19)
+
+```typescript
+}, [countdown, onDone]);  // onDone changes on parent re-render
+```
+
+Unlike `RoleSplashScreen` which uses a ref for the callback, `VotingSplashScreen` has `onDone` in the effect deps. If the parent re-renders (which happens when gameState changes), `onDone` gets a new reference, resetting the countdown effect.
+
+---
+
+### L2. `GameProvider` Doesn't Clear `isSubscribedRef` on Room Change
+**File:** [GameContext.tsx](file:///c:/Users/Admin/Desktop/Amogus-main/context/GameContext.tsx#L238-L253)
+
+When `room` changes (e.g., navigating to a different room), the cleanup function doesn't call `supabase.removeChannel()`, relying instead on `setupSubscriptions` to do it. But `isSubscribedRef.current` is set to `false` in the else branch — which means if the user navigates away from a room page, the old channel remains subscribed until garbage collected.
+
+---
+
+### L3. Room Code Collision Not Fully Handled
+**File:** [create/route.ts](file:///c:/Users/Admin/Desktop/Amogus-main/app/api/room/create/route.ts#L24-L30)
+
+The unique code check does `select('id').eq('code', code).single()` in a loop up to 10 times. But the `rooms` table already has a `UNIQUE(code)` constraint, so the insert itself will fail on collision. The pre-check is a TOCTOU race (two requests could check the same code simultaneously). Better to just rely on the DB constraint and retry on conflict.
+
+---
+
+### L4. No DELETE Policy on `rooms` or `players`
+While `rooms` and `players` have no DELETE RLS policy, RLS is enabled. This means deletions are silently blocked. If you ever need to delete rooms (for cleanup), you'll need to add DELETE policies or use the service role key.
+
+---
+
+## 📊 Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Client ["Client (Next.js CSR)"]
+        Home["HomeScreen"]
+        Room["RoomPage"]
+        Lobby["LobbyScreen"]
+        Game["GameScreen + TurnOverlay"]
+        Vote["VotingScreen"]
+        Results["ResultsScreen"]
+        GC["GameContext (Realtime)"]
+    end
+
+    subgraph API ["API Routes (Next.js Server)"]
+        RC["room/create"]
+        RJ["room/join"]
+        RL["room/leave"]
+        RH["room/heartbeat"]
+        GS["game/start"]
+        GT["game/next-turn"]
+        GV["game/vote"]
+        GCH["game/chat"]
+        FB["feedback"]
+        LK["livekit/token"]
+    end
+
+    subgraph DB ["Supabase (PostgreSQL)"]
+        rooms["rooms"]
+        players["players"]
+        game_state["game_state"]
+        votes["votes"]
+        chat["chat_messages"]
+        par["play_again_*"]
+        feedback["feedback"]
+    end
+
+    Home --> RC & RJ
+    Room --> GC
+    GC -->|Realtime| players & game_state & rooms & votes
+    Lobby --> GCH
+    Game --> GT & GCH
+    Vote --> GV
+    Results -->|Direct DB calls!| players & chat & game_state & rooms & votes & par
+
+    RC & RJ & RL & RH --> players & rooms
+    GS --> players & game_state & rooms
+    GT --> game_state & rooms
+    GV --> votes & players & game_state & rooms
+    GCH --> chat
+    FB --> feedback
+
+    style Results fill:#4a1111,stroke:#ff4444
+    style GC fill:#0a2a4a,stroke:#3b82f6
+```
+
+> [!WARNING]
+> `ResultsScreen` (red) makes direct client-side DB mutations bypassing the API layer. This is a significant architecture concern.
+
+---
+
+## 🎯 Prioritized Fix Recommendations
+
+### Immediate (Before Next Deploy)
+1. **C2 — Hide player words from client** until results phase (Postgres function or column-level security)
+2. **C1 — Fix vote tie-breaking** (add explicit tie logic)
+3. **C4 — Atomize vote tallying** (use Postgres function or row-level lock)
+4. **H5 — Fix LobbyScreen subscription deps** (remove `players` from useEffect deps)
+
+### Short-Term (This Week)
+5. **C3 — Use service role key on server** (`SUPABASE_SERVICE_ROLE_KEY`)
+6. **H3 — Move `handleStartNewGame` to a server API route** 
+7. **H1 — Tighten RLS policies** (at minimum, restrict UPDATE/DELETE)
+8. **M1 — Add missing indexes** on foreign keys
+9. **M7 — Deduplicate chat messages** by ID
+
+### Medium-Term
+10. **M5 — Add room expiration** (Postgres cron job or edge function)
+11. **H2 — Validate heartbeat ownership** (require sessionId match)
+12. **M2 — Remove duplicate data loading** on room page
+13. **M4 — Block eliminated players from chatting**
+14. **M6 — Fix stale gameState in refreshVotes**
+
+Would you like me to start fixing any of these? I'd recommend tackling the critical items (C1-C4) first.
