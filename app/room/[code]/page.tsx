@@ -108,7 +108,8 @@ export default function RoomPage() {
     const curr = gameState?.current_phase ?? null;
 
     if (curr && prev !== curr) {
-      if (prev === 'lobby' && curr === 'speaking') {
+      // Trigger role splash on any transition TO 'speaking' (covers lobby->speaking AND play-again results->speaking)
+      if (curr === 'speaking' && prev !== null) {
         setShowRoleSplash(true);
       }
       if (prev === 'speaking' && curr === 'voting') {

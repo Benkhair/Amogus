@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only host can start a new game' }, { status: 403 });
   }
 
-  if (room.status !== 'ended') {
+  if (room.status !== 'ended' && room.status !== 'results') {
     return NextResponse.json({ error: 'Game is not ready to restart' }, { status: 400 });
   }
 

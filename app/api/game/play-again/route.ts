@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only host can create a play again request' }, { status: 403 });
   }
 
-  if (room.status !== 'ended') {
+  if (room.status !== 'ended' && room.status !== 'results') {
     return NextResponse.json({ error: 'Play again is only available after the round ends' }, { status: 400 });
   }
 
