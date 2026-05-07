@@ -34,6 +34,7 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
   const [countdown, setCountdown] = useState<number>(TURN_DURATION);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const hasAutoSkipped = useRef(false);
+  const currentClueRef = useRef<boolean>(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
@@ -167,11 +168,17 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Keep currentClueRef in sync so the timer closure reads fresh data
+  useEffect(() => {
+    currentClueRef.current = !!currentClue;
+  }, [currentClue]);
+
   // Reset myClue and countdown when turn changes
   useEffect(() => {
     setMyClue('');
     setClueInput('');
     hasAutoSkipped.current = false;
+    currentClueRef.current = false;
   }, [gameState?.current_turn_index]);
 
   // Countdown timer based on timer_end from game state
@@ -187,7 +194,8 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
       setCountdown(remaining);
 
       // Auto-skip if timer expires and I'm the speaker and no clue was sent
-      if (remaining <= 0 && isMyTurn && !currentClue && !hasAutoSkipped.current) {
+      // Use ref for currentClue so we always read the latest value regardless of closure
+      if (remaining <= 0 && isMyTurn && !currentClueRef.current && !hasAutoSkipped.current) {
         hasAutoSkipped.current = true;
         onAdvance(true);
       }
@@ -196,7 +204,8 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     tick();
     const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [gameState?.timer_end, gameState?.current_phase, isMyTurn, currentClue, onAdvance]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.timer_end, gameState?.current_phase, isMyTurn, onAdvance]);
 
   const sendMessage = async (inputText: string, isClue: boolean = false) => {
     if (!inputText.trim() || !myPlayer || !room || sending) return;

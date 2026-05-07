@@ -31,52 +31,56 @@ export async function POST(req: NextRequest) {
   const isCurrentSpeaker = currentSpeaker?.session_id === sessionId;
   const isHost = room.host_id === sessionId;
 
+  // Check if current speaker is disconnected — host can always advance in that case
+  const { data: speakerInfo } = await supabase
+    .from('players')
+    .select('is_connected')
+    .eq('id', currentSpeakerId)
+    .maybeSingle();
+
+  const speakerIsDisconnected = !speakerInfo?.is_connected;
+
   if (!isCurrentSpeaker && !isHost) {
     return NextResponse.json({ error: 'Only the current speaker or host can advance the turn' }, { status: 403 });
   }
 
-  // Get all players in turn order and filter out disconnected ones
+  // Get all players in turn order and their connection + skip status
   const { data: allPlayers } = await supabase
     .from('players')
-    .select('id, is_connected')
+    .select('id, is_connected, has_skipped')
     .in('id', gs.turn_order);
-  
-  const connectedPlayerIds = new Set(
-    allPlayers?.filter(p => p.is_connected).map(p => p.id) || []
-  );
-  
-  // Filter turn order to only include connected players
-  let turnOrder = gs.turn_order.filter((id: string) => connectedPlayerIds.has(id));
-  
+
+  const playerMap = new Map((allPlayers ?? []).map(p => [p.id, p]));
+
+  // Filter turn order to only include connected players (remove disconnected)
+  let turnOrder: string[] = gs.turn_order.filter((id: string) => playerMap.get(id)?.is_connected === true);
+
   // Find current speaker's position in filtered turn order
   const currentIndexInFiltered = turnOrder.indexOf(currentSpeakerId);
 
-  // Handle skip system - each player gets 1 skip
-  if (skip && currentSpeakerId && currentIndexInFiltered !== -1) {
-    // Check if player has already used their skip
-    const { data: currentPlayer } = await supabase
-      .from('players')
-      .select('has_skipped')
-      .eq('id', currentSpeakerId)
-      .single();
-    
-    if (currentPlayer && !currentPlayer.has_skipped) {
-      // First skip - mark as skipped and re-add to end of rotation
+  // Handle skip system — each player gets 1 skip (only if speaker is still connected)
+  if (skip && currentSpeakerId && !speakerIsDisconnected && currentIndexInFiltered !== -1) {
+    const speakerData = playerMap.get(currentSpeakerId);
+    if (speakerData && !speakerData.has_skipped) {
+      // First skip — mark as skipped and re-add to end of rotation
       await supabase
         .from('players')
         .update({ has_skipped: true })
         .eq('id', currentSpeakerId);
-      
+
       // Add player back to end of turn order for another chance
       turnOrder.push(currentSpeakerId);
     }
-    // If already skipped, they don't get another chance - move to next player
+    // If already skipped, they don't get another chance — move to next player
   }
 
-  // Calculate next index based on filtered turn order
-  const effectiveCurrentIndex = currentIndexInFiltered !== -1 ? currentIndexInFiltered : 0;
+  // Calculate next index. If speaker was disconnected (not in filtered order), 
+  // use the original index position to continue from where we are.
+  const effectiveCurrentIndex = currentIndexInFiltered !== -1
+    ? currentIndexInFiltered
+    : Math.min(gs.current_turn_index, Math.max(0, turnOrder.length - 1));
   const nextIndex = effectiveCurrentIndex + 1;
-  const allDone = nextIndex >= turnOrder.length;
+  const allDone = nextIndex >= turnOrder.length || turnOrder.length === 0;
 
   if (allDone) {
     // Move to voting phase
