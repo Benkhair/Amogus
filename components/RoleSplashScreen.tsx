@@ -12,6 +12,7 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
   const { myPlayer } = useGame();
   const [progress, setProgress] = useState(0);
   const [blurred, setBlurred] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState(5);
 
   const isImposter = myPlayer?.is_imposter ?? false;
   const roleText = isImposter ? 'Sinungaling' : 'Normal na Tao';
@@ -20,21 +21,37 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
   const category = myPlayer?.category ?? '';
 
   useEffect(() => {
+    // 5 seconds total = 50ms * 100 increments = 5000ms
     const interval = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) {
           clearInterval(interval);
-          setTimeout(onDone, 300);
+          setTimeout(onDone, 200);
           return 100;
         }
         return p + 2;
       });
-    }, 120);
-    return () => clearInterval(interval);
+    }, 50);
+
+    // Countdown timer
+    const countdownInterval = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(countdownInterval);
+    };
   }, [onDone]);
 
   useEffect(() => {
-    const t = setTimeout(() => setBlurred(false), 800);
+    const t = setTimeout(() => setBlurred(false), 600);
     return () => clearTimeout(t);
   }, []);
 
@@ -64,6 +81,15 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
             {roleEmoji}
           </div>
 
+          {/* Category - Now Prominent! */}
+          {category && (
+            <div className={`px-4 py-2 rounded-full border ${isImposter ? 'bg-red-500/10 border-red-500/30' : 'bg-indigo-500/10 border-indigo-500/30'}`}>
+              <p className={`text-sm font-bold uppercase tracking-wider ${isImposter ? 'text-red-300' : 'text-indigo-300'}`}>
+                Category: {category}
+              </p>
+            </div>
+          )}
+
           {/* Role title */}
           <div className="text-center">
             <p className={`text-sm uppercase tracking-wider font-bold mb-1 ${isImposter ? 'text-red-400' : 'text-indigo-400'}`}>
@@ -82,9 +108,6 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-2">
               {isImposter ? 'Fake Word' : 'Your Word'}
             </p>
-            {category && (
-              <p className="text-gray-500 text-xs mb-2 uppercase tracking-wide">Category: {category}</p>
-            )}
             <div
               className={`relative rounded-xl p-4 border cursor-pointer transition-all ${
                 blurred ? 'blur-md' : 'blur-0'
@@ -105,11 +128,11 @@ export default function RoleSplashScreen({ onDone }: RoleSplashScreenProps) {
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress bar with countdown */}
         <div className="w-full mt-6 animate-slideUp" style={{ animationDelay: '0.2s' }}>
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-gray-500 text-xs uppercase tracking-wider font-medium">Entering game...</span>
-            <span className="text-white text-xs font-bold tabular-nums">{Math.round(progress)}%</span>
+            <span className="text-gray-500 text-xs uppercase tracking-wider font-medium">Starting in {secondsLeft}s...</span>
+            <span className={`text-xs font-bold tabular-nums ${isImposter ? 'text-red-400' : 'text-indigo-400'}`}>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 bg-gray-800/80 rounded-full overflow-hidden border border-gray-700/50">
             <div

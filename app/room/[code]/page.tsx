@@ -200,22 +200,52 @@ export default function RoomPage() {
 
 function ScreenLoader({ label = 'Loading...' }: { label?: string }) {
   return (
-    <div className="cinematic-bg flex items-center justify-center min-h-screen overflow-hidden">
-      <div className="relative flex flex-col items-center gap-6">
-        {/* Ambient glow */}
-        <div className="absolute -inset-24 rounded-full bg-red-600/10 blur-3xl animate-glowPulse pointer-events-none" />
+    <div className="cinematic-bg flex items-center justify-center min-h-screen overflow-hidden bg-[#0a0a14]">
+      <div className="relative flex flex-col items-center gap-8">
+        {/* Animated ambient glow */}
+        <div className="absolute -inset-32 rounded-full bg-gradient-to-r from-red-600/20 via-orange-600/10 to-red-600/20 blur-3xl animate-glowPulse pointer-events-none" />
 
-        {/* Logo crest */}
-        <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-2xl shadow-red-900/60 animate-floatSlow">
-          <div className="absolute inset-0 rounded-full glow-ring-red" />
-          <span className="text-3xl">💀</span>
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-yellow-400 border-2 border-gray-950" />
+        {/* Logo crest with enhanced animation */}
+        <div className="relative">
+          {/* Outer glow ring */}
+          <div className="absolute inset-0 rounded-full bg-red-500/30 blur-xl animate-pulse" />
+          
+          {/* Main logo container */}
+          <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-red-400 via-red-600 to-red-800 flex items-center justify-center shadow-2xl shadow-red-900/60 animate-floatSlow border-2 border-red-400/50">
+            {/* Inner ring effect */}
+            <div className="absolute inset-1 rounded-full border border-red-300/30" />
+            <div className="absolute inset-0 rounded-full glow-ring-red" />
+            
+            {/* Skull emoji with bounce */}
+            <span className="text-4xl animate-bounce" style={{ animationDuration: '2s' }}>💀</span>
+            
+            {/* Status indicator dot */}
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-yellow-400 border-2 border-gray-950 animate-pulse" />
+          </div>
         </div>
 
-        {/* Spinner ring */}
-        <div className="w-10 h-10 rounded-full border-2 border-white/10 border-t-red-500 animate-spin" />
+        {/* Enhanced spinner with dual rings */}
+        <div className="relative w-12 h-12">
+          {/* Outer ring */}
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-red-500/60 border-r-red-500/30 animate-spin" style={{ animationDuration: '1.5s' }} />
+          {/* Inner ring */}
+          <div className="absolute inset-2 rounded-full border-2 border-transparent border-t-red-400 animate-spin" style={{ animationDuration: '1s', animationDirection: 'reverse' }} />
+          {/* Center dot */}
+          <div className="absolute inset-4 rounded-full bg-red-500/80 animate-pulse" />
+        </div>
 
-        <p className="text-shimmer text-xs uppercase tracking-[0.4em] font-bold">{label}</p>
+        {/* Loading text with typing effect */}
+        <div className="text-center space-y-2">
+          <p className="text-white/90 text-sm font-bold tracking-wider uppercase animate-pulse">{label}</p>
+          <div className="flex items-center justify-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 rounded-full bg-red-500/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 rounded-full bg-red-500/30 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
+
+        {/* Game title */}
+        <p className="text-gray-600 text-xs uppercase tracking-[0.3em] font-medium">Sino-ngaling</p>
       </div>
     </div>
   );

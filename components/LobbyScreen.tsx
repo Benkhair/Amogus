@@ -7,6 +7,7 @@ import { Copy, CheckCheck, Users, Crown, Loader2, Skull, MessageCircle, Send } f
 import LeaveButton from './LeaveButton';
 
 interface LobbyChatMessage {
+  id?: string;
   playerId: string;
   playerName: string;
   color: string;
@@ -104,16 +105,17 @@ function LobbyScreen() {
     // Load history
     supabase
       .from('chat_messages')
-      .select('*, players(name, avatar_color)')
+      .select('id, player_id, text, created_at, players(name, avatar_color)')
       .eq('room_id', room.id)
       .eq('type', 'lobby')
       .order('created_at')
       .then(({ data }) => {
         if (data) {
-          setChatMessages(data.map((m: { player_id: string; players?: { name?: string; avatar_color?: string }; text: string; created_at: string }) => ({
+          setChatMessages(data.map((m: { id: string; player_id: string; players?: { name?: string; avatar_color?: string }[]; text: string; created_at: string }) => ({
+            id: m.id,
             playerId: m.player_id,
-            playerName: m.players?.name ?? 'Unknown',
-            color: m.players?.avatar_color ?? '#6366f1',
+            playerName: m.players?.[0]?.name ?? 'Unknown',
+            color: m.players?.[0]?.avatar_color ?? '#6366f1',
             text: m.text,
             ts: new Date(m.created_at).getTime(),
           })));
@@ -134,6 +136,7 @@ function LobbyScreen() {
             return prev;
           }
           return [...prev, {
+            id: row.id,
             playerId: row.player_id,
             playerName: player?.name ?? 'Unknown',
             color: player?.avatar_color ?? '#6366f1',
@@ -226,8 +229,8 @@ function LobbyScreen() {
               <div className="flex items-center justify-center h-full text-gray-500 text-xs text-center">
               </div>
             )}
-            {chatMessages.map((m, i) => (
-              <div key={i} className={`flex gap-2 text-xs ${m.playerId === myPlayer?.id ? 'flex-row-reverse' : ''}`}>
+            {chatMessages.map((m) => (
+              <div key={m.id || `${m.playerId}-${m.ts}`} className={`flex gap-2 text-xs ${m.playerId === myPlayer?.id ? 'flex-row-reverse' : ''}`}>
                 <div
                   className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold border border-white/20"
                   style={{ backgroundColor: m.color }}
