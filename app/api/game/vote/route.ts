@@ -32,11 +32,14 @@ export async function POST(req: NextRequest) {
     .eq('is_eliminated', false)
     .eq('is_connected', true);
 
+  // Only count votes from active (non-eliminated) players
+  const activePlayerIds = activePlayers?.map((p) => p.id) || [];
   const { data: currentVotes } = await supabase
     .from('votes')
     .select('*')
     .eq('room_id', roomId)
-    .eq('round', gs.round);
+    .eq('round', gs.round)
+    .in('voter_id', activePlayerIds);
 
   const allVoted = activePlayers && currentVotes && currentVotes.length >= activePlayers.length;
 

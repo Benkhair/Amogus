@@ -129,6 +129,13 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   const phase = gameState.current_phase;
 
+  // Hide elimination reveal when phase changes to results
+  useEffect(() => {
+    if (phase === 'results' && showEliminationReveal) {
+      setShowEliminationReveal(false);
+    }
+  }, [phase, showEliminationReveal]);
+
   if (showRoleSplash) return <Suspense fallback={<ScreenLoader />}><RoleSplashScreen onDone={() => setShowRoleSplash(false)} /></Suspense>;
   if (showVotingSplash) return <Suspense fallback={<ScreenLoader />}><VotingSplashScreen onDone={() => setShowVotingSplash(false)} /></Suspense>;
   if (showEliminationReveal && eliminationData) {
