@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, use, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
@@ -16,8 +16,9 @@ const RoleSplashScreen = dynamic(() => import('@/components/RoleSplashScreen'), 
 const VotingSplashScreen = dynamic(() => import('@/components/VotingSplashScreen'), { ssr: false });
 const EliminationRevealScreen = dynamic(() => import('@/components/EliminationRevealScreen'), { ssr: false });
 
-export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = use(params);
+export default function RoomPage() {
+  const params = useParams();
+  const code = typeof params.code === 'string' ? params.code : '';
   const router = useRouter();
   const { room, gameState, myPlayer, setRoom, sessionId } = useGame();
 
@@ -37,27 +38,64 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   useHeartbeat(myPlayer?.id, sessionId);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!code || !sessionId) return;
 
     const load = async () => {
-      const { data: roomData } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .single();
+      try {
+        const { data: roomData, error: roomError } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('code', code.toUpperCase())
+          .single();
 
-      if (!roomData) {
-        router.push('/');
-        return;
+        if (roomError) {
+          console.error('Room load error:', roomError);
+          setLoadError('Failed to load room. Please try again.');
+          return;
+        }
+
+        if (!roomData) {
+          setLoadError('Room not found. It may have been deleted or expired.');
+          return;
+        }
+        
+        setRoom(roomData);
+        initialLoadDone.current = true;
+      } catch (err) {
+        console.error('Unexpected error loading room:', err);
+        setLoadError('Something went wrong. Please try again.');
       }
-      setRoom(roomData);
-
-      initialLoadDone.current = true;
     };
 
     load();
   }, [code, sessionId]);
+
+  // Show error screen if room failed to load
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="relative mb-8">
+            <div className="absolute inset-0 bg-red-600/20 blur-3xl rounded-full" />
+            <div className="relative w-24 h-24 mx-auto rounded-full bg-gray-900 border border-red-500/30 flex items-center justify-center">
+              <span className="text-4xl">💀</span>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-3">Room Error</h1>
+          <p className="text-gray-400 text-sm mb-8">{loadError}</p>
+          <button
+            onClick={() => router.push('/')}
+            className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition-all"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Show splash screens only on actual phase transitions, never on initial load
   useEffect(() => {
