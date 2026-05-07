@@ -7,6 +7,7 @@ import TurnOverlay from './TurnOverlay';
 import LeaveButton from './LeaveButton';
 
 const GameWorld = dynamic(() => import('./3d/GameWorld'), { ssr: false });
+const SpectatorOverlay = dynamic(() => import('./SpectatorOverlay'), { ssr: false });
 
 export default function GameScreen() {
   const { room, myPlayer, players, gameState, currentSpeaker, isHost, sessionId } = useGame();
@@ -71,10 +72,11 @@ export default function GameScreen() {
   }, [gameState?.current_turn_index, gameState?.timer_end, gameState?.current_phase, currentSpeaker?.is_connected, isHost]);
 
   const activePlayers = players.filter((p) => p.is_connected);
+  const isEliminated = myPlayer?.is_eliminated ?? false;
 
   return (
     <div className="relative w-full h-screen bg-gray-950 overflow-hidden">
-      {/* 3D World */}
+      {/* 3D World - still visible to spectators */}
       <GameWorld
         players={activePlayers}
         currentSpeaker={currentSpeaker}
@@ -82,8 +84,11 @@ export default function GameScreen() {
         phase={gameState?.current_phase ?? 'speaking'}
       />
 
-      {/* HUD overlay */}
-      <TurnOverlay onAdvance={advanceTurn} advancing={advancing} />
+      {/* HUD overlay - only for alive players */}
+      {!isEliminated && <TurnOverlay onAdvance={advanceTurn} advancing={advancing} />}
+
+      {/* Spectator Overlay - only for eliminated players */}
+      {isEliminated && <SpectatorOverlay />}
 
       {/* Leave button — top right */}
       <div className="absolute top-4 right-4 z-50">

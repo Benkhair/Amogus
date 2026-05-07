@@ -14,6 +14,7 @@ const VotingScreen = dynamic(() => import('@/components/VotingScreen'), { ssr: f
 const ResultsScreen = dynamic(() => import('@/components/ResultsScreen'), { ssr: false });
 const RoleSplashScreen = dynamic(() => import('@/components/RoleSplashScreen'), { ssr: false });
 const VotingSplashScreen = dynamic(() => import('@/components/VotingSplashScreen'), { ssr: false });
+const EliminationRevealScreen = dynamic(() => import('@/components/EliminationRevealScreen'), { ssr: false });
 
 export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -26,6 +27,13 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   const [showRoleSplash, setShowRoleSplash] = useState(false);
   const [showVotingSplash, setShowVotingSplash] = useState(false);
+  const [showEliminationReveal, setShowEliminationReveal] = useState(false);
+  const [eliminationData, setEliminationData] = useState<{
+    eliminatedPlayer: { id: string; name: string; avatar_color: string; is_imposter: boolean } | null;
+    isGameOver: boolean;
+    imposterWins: boolean;
+    shouldContinue: boolean;
+  } | null>(null);
 
   useHeartbeat(myPlayer?.id, sessionId);
 
@@ -68,9 +76,37 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       if (prev === 'speaking' && curr === 'voting') {
         setShowVotingSplash(true);
       }
+      // Note: elimination_reveal is handled via eliminationData state, not phase transition
       prevPhaseRef.current = curr;
     }
   }, [gameState?.current_phase]);
+
+  // Handle elimination reveal completion
+  const handleEliminationContinue = async () => {
+    if (!eliminationData || !room) return;
+
+    setShowEliminationReveal(false);
+
+    if (eliminationData.isGameOver) {
+      // Game ended - show results
+      return;
+    }
+
+    if (eliminationData.shouldContinue && gameState?.current_phase !== 'results') {
+      // Host starts next round
+      if (room.host_id === sessionId) {
+        try {
+          await fetch('/api/game/next-round', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roomId: room.id, sessionId }),
+          });
+        } catch (err) {
+          console.error('Failed to start next round:', err);
+        }
+      }
+    }
+  };
 
   if (!room || !gameState) {
     return <ScreenLoader label="Loading room..." />;
@@ -80,10 +116,22 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   if (showRoleSplash) return <Suspense fallback={<ScreenLoader />}><RoleSplashScreen onDone={() => setShowRoleSplash(false)} /></Suspense>;
   if (showVotingSplash) return <Suspense fallback={<ScreenLoader />}><VotingSplashScreen onDone={() => setShowVotingSplash(false)} /></Suspense>;
+  if (showEliminationReveal && eliminationData) {
+    return (
+      <Suspense fallback={<ScreenLoader />}>
+        <EliminationRevealScreen
+          eliminatedPlayer={eliminationData.eliminatedPlayer}
+          isGameOver={eliminationData.isGameOver}
+          imposterWins={eliminationData.imposterWins}
+          onContinue={handleEliminationContinue}
+        />
+      </Suspense>
+    );
+  }
 
   if (phase === 'lobby') return <Suspense fallback={<ScreenLoader />}><div className="animate-fadeIn"><LobbyScreen /></div></Suspense>;
   if (phase === 'speaking') return <Suspense fallback={<ScreenLoader />}><div className="animate-fadeIn"><GameScreen /></div></Suspense>;
-  if (phase === 'voting') return <Suspense fallback={<ScreenLoader />}><div className="animate-fadeIn"><VotingScreen /></div></Suspense>;
+  if (phase === 'voting') return <Suspense fallback={<ScreenLoader />}><div className="animate-fadeIn"><VotingScreen onElimination={(data) => { setEliminationData(data); setShowEliminationReveal(true); }} /></div></Suspense>;
   if (phase === 'results') return <Suspense fallback={<ScreenLoader />}><div className="animate-fadeIn"><ResultsScreen /></div></Suspense>;
 
   return null;

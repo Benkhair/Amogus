@@ -54,14 +54,28 @@ export async function POST(req: NextRequest) {
 
     await touchRoomActivity(supabase, roomId);
 
+    // Get eliminated player details
+    let eliminatedPlayer = null;
+    if (result?.eliminated_id) {
+      const { data: player } = await supabase
+        .from('players')
+        .select('id, name, is_imposter, avatar_color')
+        .eq('id', result.eliminated_id)
+        .single();
+      eliminatedPlayer = player;
+    }
+
     return NextResponse.json({
       success: true,
       allVoted: true,
       tie: result.tie ?? false,
       eliminatedId: result.eliminated_id ?? null,
-      imposterWins: result.imposter_wins,
-      imposterId: result.imposter_id,
-      imposterWord: result.imposter_word,
+      eliminatedPlayer,
+      eliminatedWasImposter: result.eliminated_was_imposter ?? false,
+      shouldContinueGame: result.should_continue_game ?? false,
+      isFinalPhase: result.is_final_phase ?? false,
+      isGameOver: !(result.should_continue_game ?? false),
+      imposterWins: result.imposter_wins ?? false,
     });
   }
 

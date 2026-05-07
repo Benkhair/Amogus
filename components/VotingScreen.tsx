@@ -5,6 +5,9 @@ import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Vote, CheckCircle, Loader2, Skull, Edit3 } from 'lucide-react';
 import LeaveButton from './LeaveButton';
+import dynamic from 'next/dynamic';
+
+const SpectatorOverlay = dynamic(() => import('./SpectatorOverlay'), { ssr: false });
 
 interface Clue {
   playerId: string;
@@ -13,7 +16,16 @@ interface Clue {
   text: string;
 }
 
-export default function VotingScreen() {
+interface VotingScreenProps {
+  onElimination?: (data: {
+    eliminatedPlayer: { id: string; name: string; avatar_color: string; is_imposter: boolean } | null;
+    isGameOver: boolean;
+    imposterWins: boolean;
+    shouldContinue: boolean;
+  }) => void;
+}
+
+export default function VotingScreen({ onElimination }: VotingScreenProps) {
   const { room, myPlayer, players, votes, gameState, sessionId } = useGame();
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +34,9 @@ export default function VotingScreen() {
   const [clues, setClues] = useState<Clue[]>([]);
   const [loadingClues, setLoadingClues] = useState(true);
   const [notification, setNotification] = useState<{ message: string; playerName: string } | null>(null);
+  const [showingResults, setShowingResults] = useState(false);
   const previousPlayersRef = useRef(players);
+  const hasTriggeredElimination = useRef(false);
 
   // Detect when players leave
   const isFirstRender = useRef(true);
@@ -138,6 +152,11 @@ export default function VotingScreen() {
         setError(data.error);
       } else {
         setSubmitted(true);
+        // Check if all voted and handle elimination
+        if (data.allVoted && !hasTriggeredElimination.current) {
+          hasTriggeredElimination.current = true;
+          handleEliminationResult(data);
+        }
       }
     } catch {
       setError('Failed to submit vote');
@@ -145,6 +164,37 @@ export default function VotingScreen() {
       setSubmitting(false);
     }
   };
+
+  const handleEliminationResult = (data: {
+    eliminatedPlayer?: { id: string; name: string; avatar_color: string; is_imposter: boolean } | null;
+    eliminatedWasImposter?: boolean;
+    shouldContinueGame?: boolean;
+    isFinalPhase?: boolean;
+    isGameOver?: boolean;
+    imposterWins?: boolean;
+    tie?: boolean;
+  }) => {
+    if (onElimination) {
+      onElimination({
+        eliminatedPlayer: data.eliminatedPlayer || null,
+        isGameOver: data.isGameOver || false,
+        imposterWins: data.imposterWins || false,
+        shouldContinue: data.shouldContinueGame || false,
+      });
+    }
+  };
+
+  // Check if current player is eliminated
+  const isEliminated = myPlayer?.is_eliminated ?? false;
+
+  // If eliminated, show spectator view
+  if (isEliminated) {
+    return (
+      <div className="cinematic-bg flex flex-col flex-1 min-h-screen px-4 py-6">
+        <SpectatorOverlay />
+      </div>
+    );
+  }
 
   return (
     <div className="cinematic-bg flex flex-col flex-1 min-h-screen px-4 py-6">
@@ -307,7 +357,12 @@ export default function VotingScreen() {
         {error && <p className="text-red-400 text-sm text-center mb-3">{error}</p>}
 
         {/* Submit button */}
-        {noOneToVote ? (
+        {showingResults ? (
+          <div className="w-full py-4 rounded-xl glass-panel border-blue-500/30 text-blue-300 text-center font-semibold flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Revealing elimination...
+          </div>
+        ) : noOneToVote ? (
           <button
             onClick={handleSkip}
             disabled={submitting}

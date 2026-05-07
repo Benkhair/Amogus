@@ -1,5 +1,5 @@
 export type RoomStatus = 'waiting' | 'playing' | 'voting' | 'ended';
-export type GamePhase = 'lobby' | 'speaking' | 'voting' | 'results';
+export type GamePhase = 'lobby' | 'speaking' | 'voting' | 'elimination_reveal' | 'results';
 
 export interface Room {
   id: string;
@@ -24,6 +24,7 @@ export interface Player {
   pos_x: number;
   pos_z: number;
   joined_at: string;
+  eliminated_at?: string;
 }
 
 export interface GameState {

@@ -135,11 +135,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const refreshPlayers = useCallback(async () => {
     if (!room) return;
     try {
+      // Fetch all players including eliminated ones (for spectator features)
       const { data, error } = await supabase
         .from('players')
         .select('*')
         .eq('room_id', room.id)
-        .eq('is_eliminated', false)
         .eq('is_connected', true);
       if (error) {
         console.error('Error refreshing players:', error);
