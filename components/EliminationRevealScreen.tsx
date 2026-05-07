@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGame } from '@/context/GameContext';
-import { Skull, Ghost, ArrowRight, Sparkles, AlertTriangle } from 'lucide-react';
+import { Skull, Ghost, Sparkles, AlertTriangle } from 'lucide-react';
 
 interface EliminationRevealScreenProps {
   eliminatedPlayer: {
@@ -31,6 +31,8 @@ export default function EliminationRevealScreen({
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timer);
+          // Auto-transition when countdown reaches 0
+          setTimeout(() => onContinue(), 500);
           return 0;
         }
         return c - 1;
@@ -38,7 +40,7 @@ export default function EliminationRevealScreen({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [onContinue]);
 
   // Reveal stages animation
   useEffect(() => {
@@ -47,10 +49,6 @@ export default function EliminationRevealScreen({
       setTimeout(() => setRevealStage(index + 1), delay);
     });
   }, []);
-
-  const handleContinue = () => {
-    onContinue();
-  };
 
   const isEliminated = myPlayer?.id === eliminatedPlayer?.id;
 
@@ -151,21 +149,13 @@ export default function EliminationRevealScreen({
           </div>
         )}
 
-        {/* Continue button */}
-        {countdown <= 0 ? (
-          <button
-            onClick={handleContinue}
-            className="mt-8 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold text-lg transition-all flex items-center gap-3 shadow-lg shadow-blue-900/30 animate-slideUp"
-          >
-            {isGameOver ? 'View Results' : 'Continue Game'}
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        ) : (
-          <div className="mt-8 flex items-center gap-3 text-gray-500 animate-slideUp">
-            <Sparkles className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Continuing in {countdown}...</span>
-          </div>
-        )}
+        {/* Auto-continue indicator */}
+        <div className="mt-8 flex items-center gap-3 text-gray-500 animate-slideUp">
+          <Sparkles className="w-4 h-4 animate-spin" />
+          <span className="text-sm">
+            {countdown > 0 ? `Continuing in ${countdown}...` : 'Loading results...'}
+          </span>
+        </div>
 
         {/* Spectator notice for eliminated players */}
         {isEliminated && !isGameOver && revealStage >= 2 && (

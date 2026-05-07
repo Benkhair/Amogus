@@ -37,6 +37,26 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (existing) {
+    // Check for duplicate name when changing name (case-insensitive, active players only)
+    if (playerName && playerName.toLowerCase() !== existing.name.toLowerCase()) {
+      const { data: nameConflict } = await supabase
+        .from('players')
+        .select('id')
+        .eq('room_id', room.id)
+        .eq('is_connected', true)
+        .eq('is_eliminated', false)
+        .ilike('name', playerName)
+        .neq('id', existing.id)
+        .maybeSingle();
+
+      if (nameConflict) {
+        return NextResponse.json(
+          { error: 'That name is already taken in this room' },
+          { status: 409 }
+        );
+      }
+    }
+
     if (requestedAvatarColor) {
       const { data: colorConflict } = await supabase
         .from('players')
@@ -77,6 +97,23 @@ export async function POST(req: NextRequest) {
 
   if ((count ?? 0) >= 10) {
     return NextResponse.json({ error: 'Room is full' }, { status: 400 });
+  }
+
+  // Check for duplicate name (case-insensitive, active players only)
+  const { data: nameConflict } = await supabase
+    .from('players')
+    .select('id')
+    .eq('room_id', room.id)
+    .eq('is_connected', true)
+    .eq('is_eliminated', false)
+    .ilike('name', playerName)
+    .maybeSingle();
+
+  if (nameConflict) {
+    return NextResponse.json(
+      { error: 'That name is already taken in this room' },
+      { status: 409 }
+    );
   }
 
   if (requestedAvatarColor) {

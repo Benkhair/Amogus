@@ -88,7 +88,22 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     setShowEliminationReveal(false);
 
     if (eliminationData.isGameOver) {
-      // Game ended - show results
+      // Host ends the game and transitions to results
+      if (room.host_id === sessionId) {
+        try {
+          await fetch('/api/game/end-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              roomId: room.id,
+              sessionId,
+              imposterWins: eliminationData.imposterWins,
+            }),
+          });
+        } catch (err) {
+          console.error('Failed to end game:', err);
+        }
+      }
       return;
     }
 

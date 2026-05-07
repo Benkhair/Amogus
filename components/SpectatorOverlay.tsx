@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { supabase } from '@/lib/supabase/client';
 import { Ghost, Eye, Send, Users, Skull } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const LeaveButton = dynamic(() => import('./LeaveButton'), { ssr: false });
 
 interface ChatMessage {
   id: string;
@@ -219,13 +222,17 @@ export default function SpectatorOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col p-4">
-      {/* Top bar - Spectator indicator */}
-      <div className="pointer-events-auto flex items-center justify-center mb-4">
+      {/* Top bar - Spectator indicator + Leave button */}
+      <div className="pointer-events-auto flex items-center justify-between mb-4">
+        <div className="flex-1" /> {/* Spacer */}
         <div className="bg-gray-900/80 backdrop-blur-md border border-gray-700 rounded-full px-6 py-3 flex items-center gap-3">
           <Ghost className="w-5 h-5 text-gray-400" />
           <span className="text-gray-300 font-semibold">Spectator Mode</span>
           <span className="text-gray-500 text-sm">|</span>
           <span className="text-red-400 text-sm font-medium">You are eliminated</span>
+        </div>
+        <div className="flex-1 flex justify-end">
+          <LeaveButton />
         </div>
       </div>
 
