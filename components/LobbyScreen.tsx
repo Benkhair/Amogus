@@ -124,16 +124,23 @@ function LobbyScreen() {
     const channel = supabase
       .channel(`lobby-chat:${room.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${room.id}` }, async (payload) => {
-        const row = payload.new as { type?: string; player_id: string; text: string; created_at: string };
+        const row = payload.new as { id?: string; type?: string; player_id: string; text: string; created_at: string };
         if (row.type !== 'lobby') return;
         const player = playersRef.current.find((p) => p.id === row.player_id);
-        setChatMessages((prev) => [...prev, {
-          playerId: row.player_id,
-          playerName: player?.name ?? 'Unknown',
-          color: player?.avatar_color ?? '#6366f1',
-          text: row.text,
-          ts: new Date(row.created_at).getTime(),
-        }]);
+        setChatMessages((prev) => {
+          // Deduplication: don't add if already exists
+          const messageId = row.id || `${row.player_id}-${row.created_at}`;
+          if (prev.some((m) => (m as any).id === messageId || (m.playerId === row.player_id && m.ts === new Date(row.created_at).getTime()))) {
+            return prev;
+          }
+          return [...prev, {
+            playerId: row.player_id,
+            playerName: player?.name ?? 'Unknown',
+            color: player?.avatar_color ?? '#6366f1',
+            text: row.text,
+            ts: new Date(row.created_at).getTime(),
+          }];
+        });
       })
       .subscribe();
 

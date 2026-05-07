@@ -251,7 +251,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         filter: `room_id=eq.${room.id}`
       }, (payload) => {
         console.log('Votes change:', payload.eventType, payload);
-        refreshVotes((payload.new as { round?: number })?.round ?? gameStateRef.current?.round);
+        // Use round from payload if available, otherwise use current game state round
+        const voteRound = (payload.new as { round?: number })?.round ?? gameStateRef.current?.round;
+        refreshVotes(voteRound);
       })
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {

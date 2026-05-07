@@ -207,38 +207,50 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.timer_end, gameState?.current_phase, isMyTurn, onAdvance]);
 
-  const sendMessage = async (inputText: string, isClue: boolean = false) => {
-    if (!inputText.trim() || !myPlayer || !room || sending) return;
+  const sendMessage = async (inputText: string, isClue: boolean = false): Promise<boolean> => {
+    if (!inputText.trim() || !myPlayer || !room || sending) return false;
     const text = inputText.trim();
     setSending(true);
     try {
-      await fetch('/api/game/chat', {
+      const res = await fetch('/api/game/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId: room.id, playerId: myPlayer.id, text, type: isClue ? 'clue' : 'chat' }),
       });
+      if (!res.ok) {
+        console.error('Failed to send message:', await res.text());
+        return false;
+      }
       // If it was my turn and it's a clue, remember it
       if (isMyTurn && isClue) {
         setMyClue(text);
       }
+      return true;
+    } catch (err) {
+      console.error('Error sending message:', err);
+      return false;
     } finally {
       setSending(false);
     }
   };
 
   const sendGeneralChat = async () => {
-    if (!generalChatInput.trim()) return;
-    await sendMessage(generalChatInput, false);
-    setGeneralChatInput('');
+    if (!generalChatInput.trim() || sending) return;
+    const success = await sendMessage(generalChatInput, false);
+    if (success) {
+      setGeneralChatInput('');
+    }
   };
 
   const sendClue = async () => {
-    if (!clueInput.trim() || advancing) return;
+    if (!clueInput.trim() || advancing || sending) return;
     const text = clueInput.trim();
-    setClueInput('');
-    await sendMessage(text, true);
-    if (isMyTurn) {
-      onAdvance(false);
+    const success = await sendMessage(text, true);
+    if (success) {
+      setClueInput('');
+      if (isMyTurn) {
+        onAdvance(false);
+      }
     }
   };
 

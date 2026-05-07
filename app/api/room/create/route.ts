@@ -78,8 +78,6 @@ export async function POST(req: NextRequest) {
     if (gsError) {
       console.error('[create] game_state error:', gsError);
       return NextResponse.json({ error: gsError.message }, { status: 500 });
-    await touchRoomActivity(supabase, room.id);
-
     }
 
     await touchRoomActivity(supabase, room.id);

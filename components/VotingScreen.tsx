@@ -139,6 +139,8 @@ export default function VotingScreen({ onElimination }: VotingScreenProps) {
 
   const handleVote = async () => {
     if (!selectedTarget || !room || !myPlayer) return;
+    // Prevent double-submission
+    if (submitting || hasVoted) return;
     setSubmitting(true);
     setError('');
     try {
@@ -152,10 +154,13 @@ export default function VotingScreen({ onElimination }: VotingScreenProps) {
         setError(data.error);
       } else {
         setSubmitted(true);
-        // Check if all voted and handle elimination
+        // Check if all voted and handle elimination (only trigger once)
         if (data.allVoted && !hasTriggeredElimination.current) {
           hasTriggeredElimination.current = true;
-          handleEliminationResult(data);
+          // Only host triggers elimination to prevent race conditions
+          if (room.host_id === sessionId) {
+            handleEliminationResult(data);
+          }
         }
       }
     } catch {
@@ -222,9 +227,9 @@ export default function VotingScreen({ onElimination }: VotingScreenProps) {
             ) : clues.length === 0 ? (
               <p className="text-gray-500 text-xs text-center py-4 italic">No clues found</p>
             ) : (
-              clues.map((clue, i) => (
+              clues.map((clue) => (
                 <div 
-                  key={i} 
+                  key={`${clue.playerId}-${clue.text.slice(0, 20)}`}
                   className="rounded-lg p-3 border transition-all"
                   style={{ 
                     backgroundColor: `${clue.color}15`,
