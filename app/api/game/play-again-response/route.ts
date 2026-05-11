@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Room not found' }, { status: 404 });
   }
 
-  if (room.status !== 'ended') {
+  if (room.status !== 'ended' && room.status !== 'results') {
     return NextResponse.json({ error: 'Play again is not active' }, { status: 400 });
   }
 

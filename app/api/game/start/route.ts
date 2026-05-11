@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         pos_x: parseFloat((Math.cos(angle) * radius).toFixed(2)),
         pos_z: parseFloat((Math.sin(angle) * radius).toFixed(2)),
         has_skipped: false,
+        has_submitted_clue: false,
       })
       .eq('id', players[i].id);
   }

@@ -23,7 +23,9 @@ interface TurnOverlayProps {
 }
 
 function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
-  const { myPlayer, gameState, currentSpeaker, isMyTurn, room } = useGame();
+  const { myPlayer, gameState, currentSpeaker, isMyTurn, room, players } = useGame();
+  const playersRef = useRef(players);
+  useEffect(() => { playersRef.current = players; }, [players]);
   const [wordVisible, setWordVisible] = useState(false);
   const [generalChatInput, setGeneralChatInput] = useState('');
   const [clueInput, setClueInput] = useState('');
@@ -104,17 +106,17 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
     const loadMessages = async () => {
       const { data } = await supabase
         .from('chat_messages')
-        .select('*, players(name, avatar_color)')
+        .select('id, player_id, text, type, created_at, round, players(name, avatar_color)')
         .eq('room_id', room.id)
         .eq('round', currentRound)
         .order('created_at');
         
       if (data) {
-        setMessages(data.map((m: { id: string; player_id: string; players?: { name?: string; avatar_color?: string }; text: string; created_at: string; type?: 'chat' | 'clue' }) => ({
+        setMessages(data.map((m: { id: string; player_id: string; players?: { name?: string; avatar_color?: string }[] | { name?: string; avatar_color?: string }; text: string; created_at: string; type?: 'chat' | 'clue' }) => ({
           id: m.id,
           playerId: m.player_id,
-          playerName: m.players?.name ?? 'Unknown',
-          color: m.players?.avatar_color ?? '#6366f1',
+          playerName: (Array.isArray(m.players) ? m.players[0]?.name : m.players?.name) ?? 'Unknown',
+          color: (Array.isArray(m.players) ? m.players[0]?.avatar_color : m.players?.avatar_color) ?? '#6366f1',
           text: m.text,
           ts: new Date(m.created_at).getTime(),
           type: m.type || 'chat',
@@ -131,16 +133,12 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
 
     const channel = supabase
       .channel(`chat:${room.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${room.id}` }, async (payload) => {
-        const row = payload.new as { id: string; player_id: string; text: string; type?: 'chat' | 'clue'; created_at: string; round?: number; players?: { name?: string; avatar_color?: string } };
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${room.id}` }, (payload) => {
+        const row = payload.new as { id: string; player_id: string; text: string; type?: 'chat' | 'clue'; created_at: string; round?: number };
         // Only add messages from the current round
         if (row.round && row.round !== currentRound) return;
-        // Fetch fresh player data instead of relying on captured players variable
-        const { data: playerData } = await supabase
-          .from('players')
-          .select('name, avatar_color')
-          .eq('id', row.player_id)
-          .single();
+        // Look up player from context — no extra DB query needed
+        const player = playersRef.current.find((p) => p.id === row.player_id);
         
         setMessages((prev) => {
           if (prev.some((message) => message.id === row.id)) {
@@ -150,8 +148,8 @@ function TurnOverlay({ onAdvance, advancing }: TurnOverlayProps) {
           return [...prev, {
             id: row.id,
             playerId: row.player_id,
-            playerName: playerData?.name ?? 'Unknown',
-            color: playerData?.avatar_color ?? '#6366f1',
+            playerName: player?.name ?? 'Unknown',
+            color: player?.avatar_color ?? '#6366f1',
             text: row.text,
             ts: new Date(row.created_at).getTime(),
             type: row.type || 'chat',

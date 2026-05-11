@@ -44,16 +44,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only the current speaker or host can advance the turn' }, { status: 403 });
   }
 
-  // Get all players in turn order and their connection + skip status
+  // Get all players in turn order and their connection + skip + clue status
   const { data: allPlayers } = await supabase
     .from('players')
-    .select('id, is_connected, has_skipped')
+    .select('id, is_connected, has_skipped, has_submitted_clue')
     .in('id', gs.turn_order);
 
   const playerMap = new Map((allPlayers ?? []).map(p => [p.id, p]));
 
-  // Filter turn order to only include connected players (remove disconnected)
-  let turnOrder: string[] = gs.turn_order.filter((id: string) => playerMap.get(id)?.is_connected === true);
+  // Filter turn order: remove disconnected players AND players who already submitted a clue.
+  // The current speaker is exempted from the clue filter — they are advancing NOW (clue was just set).
+  let turnOrder: string[] = gs.turn_order.filter((id: string) => {
+    const p = playerMap.get(id);
+    if (!p?.is_connected) return false;
+    // Keep current speaker regardless of clue status (they're the one advancing right now)
+    if (id === currentSpeakerId) return true;
+    if (p.has_submitted_clue) return false;
+    return true;
+  });
 
   // Find current speaker's position in filtered turn order
   const currentIndexInFiltered = turnOrder.indexOf(currentSpeakerId);

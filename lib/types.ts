@@ -15,6 +15,7 @@ export interface Player {
   name: string;
   session_id: string;
   avatar_color: string;
+  has_submitted_clue: boolean;
   is_imposter: boolean;
   word: string;
   category: string;

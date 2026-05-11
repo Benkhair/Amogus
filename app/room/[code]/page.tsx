@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useParams } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
@@ -38,64 +38,90 @@ export default function RoomPage() {
 
   useHeartbeat(myPlayer?.id, sessionId);
 
+  const MAX_RETRIES = 5;
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptRef = useRef(0);
+  const loadAbortedRef = useRef(false);
+
+  const loadRoom = useCallback(async (attempt: number = 0) => {
+    if (!code || !sessionId) return;
+    attemptRef.current = attempt;
+    loadAbortedRef.current = false;
+    setIsRetrying(attempt > 0);
+
+    try {
+      const { data: roomData, error: roomError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .single();
+
+      if (loadAbortedRef.current) return;
+
+      // Check if room not found (PGRST116 = not found, or no data/error combo)
+      const isNotFound = roomError?.code === 'PGRST116' || (!roomData && !roomError);
+
+      if (isNotFound) {
+        if (attempt < MAX_RETRIES) {
+          // Retry for "not found" - allow time for newly created rooms to propagate
+          console.log(`Room not found (attempt ${attempt + 1}), retrying...`);
+          const delay = attempt === 0 ? 500 : Math.min(1000 * 2 ** (attempt - 1), 8000);
+          setRetryCount(attempt + 1);
+          retryTimeoutRef.current = setTimeout(() => loadRoom(attempt + 1), delay);
+        } else {
+          // After all retries, definitively not found
+          setLoadError('room_not_found');
+          setIsRetrying(false);
+        }
+        return;
+      }
+
+      if (roomError) {
+        console.error(`Room load error (attempt ${attempt + 1}):`, roomError);
+        if (attempt < MAX_RETRIES) {
+          // 500ms, 1s, 2s, 4s, 8s — fast first retry for cold-start latency
+          const delay = attempt === 0 ? 500 : Math.min(1000 * 2 ** (attempt - 1), 8000);
+          setRetryCount(attempt + 1);
+          retryTimeoutRef.current = setTimeout(() => loadRoom(attempt + 1), delay);
+        } else {
+          setLoadError('network_error');
+          setIsRetrying(false);
+        }
+        return;
+      }
+
+      setIsRetrying(false);
+      setLoadError(null);
+      setRoom(roomData);
+      initialLoadDone.current = true;
+    } catch (err) {
+      if (loadAbortedRef.current) return;
+      console.error(`Unexpected error loading room (attempt ${attempt + 1}):`, err);
+      if (attempt < MAX_RETRIES) {
+        const delay = attempt === 0 ? 500 : Math.min(1000 * 2 ** (attempt - 1), 8000);
+        setRetryCount(attempt + 1);
+        retryTimeoutRef.current = setTimeout(() => loadRoom(attempt + 1), delay);
+      } else {
+        setLoadError('network_error');
+        setIsRetrying(false);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, sessionId]);
 
   useEffect(() => {
     if (!code || !sessionId) return;
-
-    const load = async () => {
-      try {
-        const { data: roomData, error: roomError } = await supabase
-          .from('rooms')
-          .select('*')
-          .eq('code', code.toUpperCase())
-          .single();
-
-        if (roomError) {
-          console.error('Room load error:', roomError);
-          setLoadError('Failed to load room. Please try again.');
-          return;
-        }
-
-        if (!roomData) {
-          setLoadError('Room not found. It may have been deleted or expired.');
-          return;
-        }
-        
-        setRoom(roomData);
-        initialLoadDone.current = true;
-      } catch (err) {
-        console.error('Unexpected error loading room:', err);
-        setLoadError('Something went wrong. Please try again.');
-      }
+    loadRoom(0);
+    return () => {
+      loadAbortedRef.current = true;
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     };
+  }, [code, sessionId, loadRoom]);
 
-    load();
-  }, [code, sessionId]);
-
-  // Show error screen if room failed to load
-  if (loadError) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="relative mb-8">
-            <div className="absolute inset-0 bg-red-600/20 blur-3xl rounded-full" />
-            <div className="relative w-24 h-24 mx-auto rounded-full bg-gray-900 border border-red-500/30 flex items-center justify-center">
-              <span className="text-4xl">💀</span>
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-3">Room Error</h1>
-          <p className="text-gray-400 text-sm mb-8">{loadError}</p>
-          <button
-            onClick={() => router.push('/')}
-            className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition-all"
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // MUST be above all early returns — Rules of Hooks
 
   // Show splash screens only on actual phase transitions, never on initial load
   useEffect(() => {
@@ -119,6 +145,13 @@ export default function RoomPage() {
       prevPhaseRef.current = curr;
     }
   }, [gameState?.current_phase]);
+
+  // Hide elimination reveal when phase changes to results
+  useEffect(() => {
+    if (gameState?.current_phase === 'results' && showEliminationReveal) {
+      setShowEliminationReveal(false);
+    }
+  }, [gameState?.current_phase, showEliminationReveal]);
 
   // Handle elimination reveal completion
   const handleEliminationContinue = async () => {
@@ -162,18 +195,65 @@ export default function RoomPage() {
     }
   };
 
+  // --- All hooks declared above. Conditional returns below. ---
+
+  // Show retrying state (transient — don't flash error screen yet)
+  if (isRetrying) {
+    return (
+      <ScreenLoader label={`Reconnecting... (${retryCount}/${MAX_RETRIES})`} />
+    );
+  }
+
+  // Show error screen only after all retries exhausted or definitive 404
+  if (loadError) {
+    const isNotFound = loadError === 'room_not_found';
+    return (
+      <div className="min-h-screen bg-[#0a0a14] flex items-center justify-center px-4">
+        <div className="max-w-sm w-full text-center space-y-6">
+          <div className="relative mx-auto w-20 h-20">
+            <div className="absolute inset-0 bg-red-600/20 blur-2xl rounded-full" />
+            <div className="relative w-20 h-20 rounded-full bg-gray-900 border border-red-500/30 flex items-center justify-center">
+              <span className="text-3xl">{isNotFound ? '🚪' : '📡'}</span>
+            </div>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white mb-2">
+              {isNotFound ? 'Room Not Found' : 'Something went wrong'}
+            </h1>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              {isNotFound
+                ? 'This room may have been deleted or expired.'
+                : "We couldn't load the room. This might be due to a network issue or the room no longer exists."}
+            </p>
+          </div>
+          <div className="space-y-3">
+            {!isNotFound && (
+              <button
+                onClick={() => { setLoadError(null); setRetryCount(0); attemptRef.current = 0; loadRoom(0); }}
+                className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Try Again
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="w-full py-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold transition-all flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!room || !gameState) {
     return <ScreenLoader label="Loading room..." />;
   }
 
   const phase = gameState.current_phase;
-
-  // Hide elimination reveal when phase changes to results
-  useEffect(() => {
-    if (phase === 'results' && showEliminationReveal) {
-      setShowEliminationReveal(false);
-    }
-  }, [phase, showEliminationReveal]);
 
   if (showRoleSplash) return <Suspense fallback={<ScreenLoader />}><RoleSplashScreen onDone={() => setShowRoleSplash(false)} /></Suspense>;
   if (showVotingSplash) return <Suspense fallback={<ScreenLoader />}><VotingSplashScreen onDone={() => setShowVotingSplash(false)} /></Suspense>;

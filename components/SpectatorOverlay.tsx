@@ -34,37 +34,21 @@ export default function SpectatorOverlay() {
   const [deadMessages, setDeadMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
-  const [playerWords, setPlayerWords] = useState<PlayerWord[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const currentRound = gameState?.round ?? 1;
+  const playersRef = useRef(players);
+  useEffect(() => { playersRef.current = players; }, [players]);
 
-  // Load player words (spectators can see all words)
-  useEffect(() => {
-    if (!room) return;
-
-    const loadWords = async () => {
-      const { data } = await supabase
-        .from('players')
-        .select('id, name, is_imposter, word, category, avatar_color, is_eliminated')
-        .eq('room_id', room.id);
-
-      if (data) {
-        setPlayerWords(
-          data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            isImposter: p.is_imposter,
-            word: p.word,
-            category: p.category,
-            avatarColor: p.avatar_color || '#6366f1',
-            isEliminated: p.is_eliminated,
-          }))
-        );
-      }
-    };
-
-    loadWords();
-  }, [room?.id]);
+  // Derive player words directly from context — no extra DB query needed
+  const playerWords: PlayerWord[] = players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    isImposter: p.is_imposter,
+    word: p.word,
+    category: p.category,
+    avatarColor: p.avatar_color || '#6366f1',
+    isEliminated: p.is_eliminated,
+  }));
 
   // Load existing messages
   useEffect(() => {
@@ -74,7 +58,7 @@ export default function SpectatorOverlay() {
       // Load alive chat (normal chat)
       const { data: aliveData } = await supabase
         .from('chat_messages')
-        .select('*, players(name, avatar_color)')
+        .select('id, player_id, text, type, created_at, players(name, avatar_color)')
         .eq('room_id', room.id)
         .eq('round', currentRound)
         .in('type', ['chat', 'clue'])
@@ -85,8 +69,8 @@ export default function SpectatorOverlay() {
           aliveData.map((m) => ({
             id: m.id,
             playerId: m.player_id,
-            playerName: m.players?.name ?? 'Unknown',
-            color: m.players?.avatar_color ?? '#6366f1',
+            playerName: (Array.isArray(m.players) ? m.players[0]?.name : (m.players as { name?: string })?.name) ?? 'Unknown',
+            color: (Array.isArray(m.players) ? m.players[0]?.avatar_color : (m.players as { avatar_color?: string })?.avatar_color) ?? '#6366f1',
             text: m.text,
             ts: new Date(m.created_at).getTime(),
             type: m.type || 'chat',
@@ -97,7 +81,7 @@ export default function SpectatorOverlay() {
       // Load dead chat (spectator chat)
       const { data: deadData } = await supabase
         .from('chat_messages')
-        .select('*, players(name, avatar_color)')
+        .select('id, player_id, text, type, created_at, players(name, avatar_color)')
         .eq('room_id', room.id)
         .eq('type', 'spectator_chat')
         .order('created_at');
@@ -107,8 +91,8 @@ export default function SpectatorOverlay() {
           deadData.map((m) => ({
             id: m.id,
             playerId: m.player_id,
-            playerName: m.players?.name ?? 'Unknown',
-            color: m.players?.avatar_color ?? '#6366f1',
+            playerName: (Array.isArray(m.players) ? m.players[0]?.name : (m.players as { name?: string })?.name) ?? 'Unknown',
+            color: (Array.isArray(m.players) ? m.players[0]?.avatar_color : (m.players as { avatar_color?: string })?.avatar_color) ?? '#6366f1',
             text: m.text,
             ts: new Date(m.created_at).getTime(),
             type: 'spectator_chat',
@@ -134,7 +118,7 @@ export default function SpectatorOverlay() {
           table: 'chat_messages',
           filter: `room_id=eq.${room.id}`,
         },
-        async (payload) => {
+        (payload) => {
           const row = payload.new as {
             id: string;
             player_id: string;
@@ -144,18 +128,14 @@ export default function SpectatorOverlay() {
             round?: number;
           };
 
-          // Fetch player data
-          const { data: playerData } = await supabase
-            .from('players')
-            .select('name, avatar_color')
-            .eq('id', row.player_id)
-            .single();
+          // Look up player from context ref — no extra DB query needed
+          const player = playersRef.current.find((p) => p.id === row.player_id);
 
           const newMessage: ChatMessage = {
             id: row.id,
             playerId: row.player_id,
-            playerName: playerData?.name ?? 'Unknown',
-            color: playerData?.avatar_color ?? '#6366f1',
+            playerName: player?.name ?? 'Unknown',
+            color: player?.avatar_color ?? '#6366f1',
             text: row.text,
             ts: new Date(row.created_at).getTime(),
             type: row.type === 'spectator_chat' ? 'spectator_chat' : 'chat',

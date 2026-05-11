@@ -46,6 +46,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
   const isSubscribedRef = useRef(false);
   const gameStateRef = useRef<GameState | null>(null);
   const lastRoomIdRef = useRef<string | null>(null);
@@ -98,6 +100,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (errorStatusTimeoutRef.current) {
+        clearTimeout(errorStatusTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -135,12 +140,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const refreshPlayers = useCallback(async () => {
     if (!room) return;
     try {
-      // Fetch all players including eliminated ones (for spectator features)
+      // Fetch all players including disconnected/eliminated ones (spectators need full list)
       const { data, error } = await supabase
         .from('players')
         .select('*')
-        .eq('room_id', room.id)
-        .eq('is_connected', true);
+        .eq('room_id', room.id);
       if (error) {
         console.error('Error refreshing players:', error);
         return;
@@ -221,7 +225,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         filter: `room_id=eq.${room.id}`
       }, (payload) => {
         console.log('Players change:', payload.eventType, payload);
-        refreshPlayers();
+        if (payload.eventType === 'DELETE') {
+          setPlayers((prev) => prev.filter((p) => p.id !== (payload.old as Player)?.id));
+        } else if (payload.new && payload.eventType === 'INSERT') {
+          setPlayers((prev) => {
+            if (prev.some((p) => p.id === (payload.new as Player).id)) return prev;
+            return [...prev, payload.new as Player];
+          });
+        } else if (payload.new && payload.eventType === 'UPDATE') {
+          const updated = payload.new as Player;
+          setPlayers((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+          if (updated.session_id === sessionId) setMyPlayer(updated);
+        } else {
+          refreshPlayers();
+        }
       })
       .on('postgres_changes', {
         event: '*',
@@ -259,6 +276,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (status === 'SUBSCRIBED') {
           console.log('Realtime subscribed successfully');
           isSubscribedRef.current = true;
+          reconnectAttemptRef.current = 0;
+          if (errorStatusTimeoutRef.current) clearTimeout(errorStatusTimeoutRef.current);
           setConnectionStatus('connected');
           // Load initial data only after subscription is confirmed
           Promise.all([refreshPlayers(), refreshGameState()])
@@ -266,14 +285,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             .finally(() => setIsLoading(false));
         } else if (status === 'CHANNEL_ERROR' || err) {
           console.error('Realtime subscription error:', err);
-          setConnectionStatus('error');
           setIsLoading(false);
           isSubscribedRef.current = false;
-          // Auto-reconnect after 3 seconds
+          reconnectAttemptRef.current += 1;
+          const attempt = reconnectAttemptRef.current;
+          // Exponential backoff: 2s, 4s, 8s, cap 15s
+          const delay = Math.min(2000 * 2 ** (attempt - 1), 15000);
+          // Only show error status after 2 failed attempts to avoid flashing
+          if (attempt >= 2) {
+            if (errorStatusTimeoutRef.current) clearTimeout(errorStatusTimeoutRef.current);
+            errorStatusTimeoutRef.current = setTimeout(() => setConnectionStatus('error'), 500);
+          } else {
+            setConnectionStatus('connecting');
+          }
           reconnectTimeoutRef.current = setTimeout(() => {
             isSubscribedRef.current = false;
             setupSubscriptions();
-          }, 3000);
+          }, delay);
         } else if (status === 'CLOSED') {
           console.log('Realtime connection closed');
           setConnectionStatus('disconnected');

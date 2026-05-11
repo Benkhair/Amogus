@@ -78,6 +78,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Mark player as having submitted their clue so they aren't re-queued after a skip
+  if (messageType === 'clue') {
+    await supabase
+      .from('players')
+      .update({ has_submitted_clue: true })
+      .eq('id', playerId);
+  }
+
   await touchRoomActivity(supabase, roomId);
   return NextResponse.json({ success: true, type: messageType });
 }
